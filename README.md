@@ -78,7 +78,7 @@ Giao diện sáng và tối theo macOS.
 - **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
 - **Tai thỏ biết nói** — cắm sạc, kết nối AirPods, mất mạng, vào cuộc gọi Teams thì tai thỏ giãn ra báo; rê chuột vào tai thỏ để điều khiển nhạc (YouTube, Spotify, Nhạc…), chọn loa hoặc tai nghe, xem cuộc gọi đang diễn ra
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
-- **Nhẹ** — bản tải về chưa tới 3 MB, không chạy animation thừa
+- **Nhẹ** — bản tải về khoảng 3 MB, không chạy animation thừa
 - **Riêng tư** — mọi số liệu đọc ngay trên máy; chỉ gọi mạng để kiểm tra Internet và bản cập nhật,
   tắt được cả hai
 - **Tùy chọn** — chọn mục nào hiện trên menu bar, bật/tắt đồ thị, ẩn icon khỏi Dock, đổi tần suất cập nhật
