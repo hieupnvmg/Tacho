@@ -15,6 +15,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
+        if let index = arguments.firstIndex(of: "--promo"), index + 1 < arguments.count {
+            PromoRenderer.run(directory: arguments[index + 1])
+            exit(0)
+        }
         if let index = arguments.firstIndex(of: "--snapshot"), index + 1 < arguments.count {
             SnapshotRenderer.run(directory: arguments[index + 1])
             exit(0)

@@ -169,6 +169,25 @@ final class MonitorStore: ObservableObject {
         }
     }
 
+    /// For images that get published (`--promo`): swaps values that identify
+    /// this machine or its network for documentation placeholders.
+    func redactForScreenshots() {
+        var link = connectivity
+        link.status = .online
+        link.publicIP = "203.0.113.24"      // RFC 5737 documentation range
+        link.localIP = "192.168.1.42"
+        link.interfaceName = "en0"
+        link.interfaceKind = "Wi-Fi"
+        link.lastChecked = Date()
+        connectivity = link
+        drives = drives.map {
+            DriveSample(name: $0.name, vendor: $0.vendor, revision: $0.revision, serial: "",
+                        bsdName: $0.bsdName, mediumType: $0.mediumType,
+                        interconnect: $0.interconnect, location: $0.location,
+                        capacity: $0.capacity, smartCapable: $0.smartCapable)
+        }
+    }
+
     private static func append(_ series: inout [Double], _ value: Double) {
         series.append(value)
         if series.count > historyLength {
