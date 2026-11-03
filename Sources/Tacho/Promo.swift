@@ -35,6 +35,10 @@ enum PromoRenderer {
         Backdrop {
             VStack(alignment: .leading, spacing: 30) {
                 HStack(alignment: .bottom, spacing: 18) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 112, height: 112)
+                        .padding(-12)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Tacho")
                             .font(.system(size: 64, weight: .heavy, design: .rounded))

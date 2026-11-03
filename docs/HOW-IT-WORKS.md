@@ -23,6 +23,10 @@ double-click được (ký ad-hoc). Yêu cầu: macOS 13+, Swift 5.9+ (Command L
 App chỉ ký ad-hoc, chưa notarize. Trên máy khác, lần đầu mở macOS sẽ chặn: chuột phải vào app →
 **Open**, hoặc vào **System Settings → Privacy & Security** bấm **Open Anyway**.
 
+Biểu tượng app được vẽ bằng code trong `scripts/make-icon.swift`. Sửa xong thì chạy
+`swift scripts/make-icon.swift` để ghi lại `Assets/AppIcon.icns` (được `build-app.sh` chép vào
+bundle) và `docs/images/icon.png` (dùng trong README).
+
 Kiểm tra số liệu không cần mở cửa sổ:
 
 ```bash

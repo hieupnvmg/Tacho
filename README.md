@@ -2,6 +2,10 @@
   <img src="docs/images/hero.png" alt="Tacho — menu bar và các bảng chi tiết CPU, pin, bộ nhớ" width="100%">
 </p>
 
+<p align="center">
+  <img src="docs/images/icon.png" alt="Biểu tượng Tacho" width="128">
+</p>
+
 <h1 align="center">Tacho</h1>
 
 <p align="center">
