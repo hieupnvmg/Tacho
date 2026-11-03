@@ -73,6 +73,9 @@ Giao diện sáng và tối theo macOS.
   phụ (như renderer của Chrome) được cộng gộp về đúng app
 - **Cảnh báo kịp lúc** — CPU quá nóng, pin yếu, ổ đĩa sắp đầy, mất Internet; bật/tắt từng loại
 - **Mở cùng máy** — một công tắc trong Cài đặt
+- **Pin chuột, bàn phím, AirPods** — ngay trong bảng Pin, có cảnh báo khi sắp hết
+- **Lịch sử 24 giờ** — xem lại CPU, nhiệt độ, bộ nhớ, mạng, pin trong 1 giờ hoặc cả ngày qua
+- **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
 - **Nhẹ** — bản tải về chưa tới 3 MB, không chạy animation thừa
 - **Riêng tư** — mọi số liệu đọc ngay trên máy; chỉ gọi mạng để kiểm tra Internet và bản cập nhật,

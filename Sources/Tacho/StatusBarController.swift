@@ -12,6 +12,9 @@ final class StatusBarController: NSObject {
 
     private var items: [MenuBarModule: NSStatusItem] = [:]
     private var views: [MenuBarModule: StatusItemView] = [:]
+    /// Used instead of `items` while the compact setting is on.
+    private var compactItem: NSStatusItem?
+    private var compactView: CompactStatusView?
     private var popover = NSPopover()
     private var openModule: MenuBarModule?
     /// A transient popover closes on mouse-down, before the status button's
@@ -33,6 +36,15 @@ final class StatusBarController: NSObject {
         settings.$enabled
             .receive(on: RunLoop.main)
             .sink { [weak self] modules in self?.sync(to: modules) }
+            .store(in: &cancellables)
+
+        settings.$compact
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            // @Published fires before the new value is stored.
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self.map { $0.sync(to: $0.settings.enabled) } }
+            }
             .store(in: &cancellables)
 
         settings.$showGraphs
@@ -60,6 +72,39 @@ final class StatusBarController: NSObject {
     // MARK: Status items
 
     private func sync(to modules: Set<MenuBarModule>) {
+        if popover.isShown { popover.performClose(nil) }
+        let ordered = MenuBarModule.allCases.filter(modules.contains)
+
+        if settings.compact && !ordered.isEmpty {
+            for item in items.values { NSStatusBar.system.removeStatusItem(item) }
+            items = [:]
+            views = [:]
+            if compactItem == nil {
+                let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+                let view = CompactStatusView(store: store)
+                if let button = item.button {
+                    view.frame = button.bounds
+                    view.autoresizingMask = [.width, .height]
+                    button.addSubview(view)
+                    button.target = self
+                    button.action = #selector(statusItemClicked(_:))
+                    button.toolTip = "Tacho"
+                }
+                compactItem = item
+                compactView = view
+            }
+            compactView?.modules = ordered
+            refresh()
+            return
+        }
+
+        if let item = compactItem {
+            // Rebuilt below from scratch, in order.
+            NSStatusBar.system.removeStatusItem(item)
+            compactItem = nil
+            compactView = nil
+        }
+
         for module in items.keys where !modules.contains(module) {
             if let item = items[module] {
                 NSStatusBar.system.removeStatusItem(item)
@@ -93,6 +138,14 @@ final class StatusBarController: NSObject {
     /// Redraws every readout and resizes the ones whose text grew or shrank.
     private func refresh() {
         for module in views.keys { render(module) }
+        if let item = compactItem, let view = compactView {
+            let width = view.preferredWidth
+            if abs(item.length - width) > 0.5 {
+                item.length = width
+                view.invalidateDrawing()
+            }
+            view.redrawIfChanged()
+        }
     }
 
     /// Redraws one item, but only when what it shows has changed. The view
@@ -116,6 +169,9 @@ final class StatusBarController: NSObject {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             for (module, item) in self.items { item.button?.toolTip = module.title }
+            // Column widths depend on the translated labels.
+            if let view = self.compactView { view.modules = view.modules }
+            self.refresh()
             if self.popover.isShown { self.popover.performClose(nil) }
         }
     }
@@ -123,7 +179,20 @@ final class StatusBarController: NSObject {
     // MARK: Popover
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        guard let module = views.first(where: { $0.value.isDescendant(of: sender) })?.key else { return }
+        // In compact mode the column under the pointer says which panel to open.
+        var anchor = sender.bounds
+        let module: MenuBarModule
+        if let view = compactView, compactItem?.button === sender {
+            let point = sender.convert(NSApp.currentEvent?.locationInWindow ?? .zero, from: nil)
+            guard let hit = view.module(atX: point.x),
+                  let column = view.columns.first(where: { $0.module == hit }) else { return }
+            module = hit
+            anchor = NSRect(x: column.frame.minX, y: 0, width: column.frame.width, height: sender.bounds.height)
+        } else if let hit = views.first(where: { $0.value.isDescendant(of: sender) })?.key {
+            module = hit
+        } else {
+            return
+        }
 
         // Clicking the open item closes it; clicking another switches to it.
         if popover.isShown {
@@ -150,7 +219,7 @@ final class StatusBarController: NSObject {
         // Without activating first, a transient popover from an inactive app can
         // be dismissed by the very click that opened it.
         NSApp.activate(ignoringOtherApps: true)
-        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        popover.show(relativeTo: anchor, of: sender, preferredEdge: .minY)
         openModule = module
         store.popoverModule = module
         popover.contentViewController?.view.window?.makeKey()

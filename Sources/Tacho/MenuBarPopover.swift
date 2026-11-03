@@ -148,6 +148,7 @@ struct MenuBarPopover: View {
                 Text(L("Máy này không có pin."))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            PeripheralList(devices: store.peripherals)
         }
     }
 
@@ -741,6 +742,74 @@ private struct ProcessList: View {
         switch metric {
         case .cpu: return app.cpu > 80 ? Palette.critical : app.cpu > 40 ? Palette.warning : Palette.cpu
         case .memory: return Palette.memory
+        }
+    }
+}
+
+/// Mice, keyboards and AirPods, each battery with its own bar.
+private struct PeripheralList: View {
+    let devices: [PeripheralSample]
+
+    var body: some View {
+        if !devices.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Divider()
+                Text(L("Thiết bị Bluetooth"))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(devices) { device in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 7) {
+                            Image(systemName: device.symbol)
+                                .font(.system(size: 11))
+                                .frame(width: 16)
+                                .foregroundStyle(.secondary)
+                            Text(device.name)
+                                .font(.system(size: 11))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 6)
+                            if device.levels.count == 1 {
+                                level(device.levels[0])
+                            }
+                        }
+                        if device.levels.count > 1 {
+                            HStack(spacing: 10) {
+                                ForEach(device.levels, id: \.self) { level($0) }
+                            }
+                            .padding(.leading, 23)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func level(_ level: PeripheralSample.Level) -> some View {
+        let color = level.percent <= 20 ? Palette.critical
+            : level.percent <= 40 ? Palette.warning : Palette.memory
+        return HStack(spacing: 5) {
+            if !level.part.isEmpty {
+                Text(Self.partName(level.part))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            MeterBar(fraction: Double(level.percent) / 100, color: color, height: 4)
+                .frame(width: 34)
+            Text(verbatim: "\(level.percent)%")
+                .font(.system(size: 11, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .frame(width: 34, alignment: .trailing)
+        }
+    }
+
+    private static func partName(_ part: String) -> String {
+        switch part {
+        case "Trái": return L("Trái")
+        case "Phải": return L("Phải")
+        case "Hộp": return L("Hộp")
+        default: return part
         }
     }
 }

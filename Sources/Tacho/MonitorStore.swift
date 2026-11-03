@@ -26,6 +26,8 @@ final class MonitorStore: ObservableObject {
     @Published private(set) var temperatureHistory: [Double] = []
     @Published private(set) var drives: [DriveSample] = []
     @Published private(set) var battery = BatterySample()
+    /// Bluetooth accessories that report a battery: mice, keyboards, AirPods.
+    @Published private(set) var peripherals: [PeripheralSample] = []
 
     /// Rolling history for the sparklines, newest last.
     @Published private(set) var cpuHistory: [Double] = []
@@ -53,6 +55,7 @@ final class MonitorStore: ObservableObject {
     var popoverModule: MenuBarModule? {
         didSet {
             if wantsProcessList && popoverModule != oldValue { fetchProcesses() }
+            if popoverModule == .battery && oldValue != .battery { fetchPeripherals() }
         }
     }
 
@@ -141,6 +144,9 @@ final class MonitorStore: ObservableObject {
         // battery gauge only moves slowly.
         let wantsDrives = tick % 30 == 1
         let wantsBattery = tick % 5 == 1
+        // Accessory batteries move by a percent every few minutes; reading them
+        // runs system_profiler (~0.1 s).
+        let wantsPeripherals = tick % 60 == 1
         let collector = self.collector
 
         queue.async {
@@ -155,6 +161,7 @@ final class MonitorStore: ObservableObject {
             let volumes = wantsVolumes ? collector.volumes() : nil
             let drives = wantsDrives ? collector.drives() : nil
             let battery = wantsBattery ? collector.battery() : nil
+            let peripherals = wantsPeripherals ? PeripheralReader.read() : nil
             let uptime = ProcessInfo.processInfo.systemUptime
 
             Task { @MainActor [weak self] in
@@ -171,6 +178,7 @@ final class MonitorStore: ObservableObject {
                 if let volumes { self.volumes = volumes }
                 if let drives { self.drives = drives }
                 if let battery { self.battery = battery }
+                if let peripherals { self.peripherals = peripherals }
 
                 Self.append(&self.cpuHistory, cpu.busy)
                 Self.append(&self.memoryHistory, memory.usedFraction)
@@ -202,6 +210,13 @@ final class MonitorStore: ObservableObject {
         queue.async {
             let ranking = ProcessRanking(collector.processes())
             Task { @MainActor [weak self] in self?.apply(ranking) }
+        }
+    }
+
+    private func fetchPeripherals() {
+        queue.async {
+            let peripherals = PeripheralReader.read()
+            Task { @MainActor [weak self] in self?.peripherals = peripherals }
         }
     }
 
@@ -242,6 +257,18 @@ final class MonitorStore: ObservableObject {
         }
         appsByCPU = anonymise(appsByCPU, offset: 0)
         appsByMemory = anonymise(appsByMemory, offset: 3)
+        // Accessory names usually carry the owner's name ("Hiếu's AirPods").
+        peripherals = peripherals.map { device in
+            let name: String
+            switch device.kind {
+            case .mouse: name = "Magic Mouse"
+            case .keyboard: name = "Magic Keyboard"
+            case .trackpad: name = "Magic Trackpad"
+            case .airpods: name = "AirPods Pro"
+            case .headphones, .other: name = "Headphones"
+            }
+            return PeripheralSample(name: name, address: "", kind: device.kind, levels: device.levels)
+        }
         drives = drives.map {
             DriveSample(name: $0.name, vendor: $0.vendor, revision: $0.revision, serial: "",
                         bsdName: $0.bsdName, mediumType: $0.mediumType,

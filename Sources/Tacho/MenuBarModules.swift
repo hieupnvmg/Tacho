@@ -53,6 +53,8 @@ final class MenuBarSettings: ObservableObject {
 
     @Published var enabled: Set<MenuBarModule> { didSet { persist() } }
     @Published var showGraphs: Bool { didSet { persist() } }
+    /// All readouts in one menu bar item instead of one item each.
+    @Published var compact: Bool { didSet { persist() } }
     /// Controls the only outbound request the app makes. Off means the app
     /// talks to nothing outside this machine.
     @Published var checkConnectivity: Bool { didSet { persist() } }
@@ -71,6 +73,7 @@ final class MenuBarSettings: ObservableObject {
 
     private static let enabledKey = "menubar.enabled"
     private static let graphsKey = "menubar.showGraphs"
+    private static let compactKey = "menubar.compact"
     private static let dockKey = "menubar.hideDockIcon"
     private static let probeKey = "network.checkConnectivity"
     /// Every module this install has already seen, so later additions can be
@@ -96,6 +99,7 @@ final class MenuBarSettings: ObservableObject {
             enabled = Set(MenuBarModule.allCases.filter(\.enabledByDefault))
         }
         showGraphs = defaults.object(forKey: Self.graphsKey) as? Bool ?? true
+        compact = defaults.bool(forKey: Self.compactKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
         checkConnectivity = defaults.object(forKey: Self.probeKey) as? Bool ?? true
         language = L10n.current
@@ -129,6 +133,7 @@ final class MenuBarSettings: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.set(enabled.map(\.rawValue), forKey: Self.enabledKey)
         defaults.set(showGraphs, forKey: Self.graphsKey)
+        defaults.set(compact, forKey: Self.compactKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)
         defaults.set(checkConnectivity, forKey: Self.probeKey)
         defaults.set(language.rawValue, forKey: L10n.defaultsKey)

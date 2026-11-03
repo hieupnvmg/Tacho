@@ -7,7 +7,7 @@ import UserNotifications
 /// starts and re-arms only after the condition has clearly ended, so a reading
 /// hovering on the threshold does not produce a stream of notifications.
 enum AlertKind: String, CaseIterable, Identifiable {
-    case hotCPU, lowBattery, fullBattery, lowDisk, offline
+    case hotCPU, lowBattery, fullBattery, lowDevice, lowDisk, offline
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum AlertKind: String, CaseIterable, Identifiable {
         case .hotCPU: return L("CPU quá nóng")
         case .lowBattery: return L("Pin yếu")
         case .fullBattery: return L("Pin đã sạc đầy")
+        case .lowDevice: return L("Pin chuột, bàn phím, tai nghe yếu")
         case .lowDisk: return L("Ổ đĩa sắp đầy")
         case .offline: return L("Mất Internet")
         }
@@ -26,6 +27,7 @@ enum AlertKind: String, CaseIterable, Identifiable {
         case .hotCPU: return L("CPU trên 95°C hơn 2 phút")
         case .lowBattery: return L("Pin còn dưới 20% và chưa cắm sạc")
         case .fullBattery: return L("Đang cắm sạc và pin đã đầy")
+        case .lowDevice: return L("Thiết bị Bluetooth còn dưới 15% pin")
         case .lowDisk: return L("Ổ khởi động còn trống dưới 10%")
         case .offline: return L("Mất Internet hơn 30 giây (cần bật kiểm tra kết nối Internet)")
         }
@@ -55,6 +57,8 @@ final class AlertMonitor: NSObject, ObservableObject {
     private var fired: Set<AlertKind> = []
     private var hotSince: Date?
     private var offlineSince: Date?
+    /// Accessories already warned about, by id.
+    private var lowDevices: Set<String> = []
 
     /// Notifications need a bundle; the bare binary (`--dump`, tests) has none
     /// and `UNUserNotificationCenter` would crash there.
@@ -132,6 +136,19 @@ final class AlertMonitor: NSObject, ObservableObject {
                 trigger(.fullBattery, body: String(format: L("Pin đã %.0f%%, có thể rút sạc."), battery.percentage * 100))
             } else if !battery.isPluggedIn {
                 fired.remove(.fullBattery)
+            }
+        }
+
+        for device in store.peripherals {
+            if device.lowest <= 15 {
+                guard !lowDevices.contains(device.id) else { continue }
+                lowDevices.insert(device.id)
+                if enabled.contains(.lowDevice) {
+                    deliver(id: "device.\(device.id)", title: L("%@ sắp hết pin", device.name),
+                            body: String(format: L("Còn %d%%."), device.lowest))
+                }
+            } else if device.lowest > 25 {
+                lowDevices.remove(device.id)
             }
         }
 

@@ -56,6 +56,13 @@ enum SnapshotRenderer {
                    width: 290, scheme: .dark, to: folder, name: "popover-\(module.rawValue)")
         }
 
+        for (range, name) in [(HistoryRecorder.Range.hour, "history-hour"), (.day, "history-day")] {
+            AppEnvironment.history.range = range
+            render(HistoryView().environmentObject(AppEnvironment.history),
+                   width: 880, scheme: .dark, to: folder, name: name)
+        }
+        AppEnvironment.history.range = .hour
+
         renderMenuBar(store: store, to: folder)
         print("Đã ghi ảnh vào \(folder.path)")
     }
@@ -99,6 +106,13 @@ enum SnapshotRenderer {
                 container.addSubview(view)
                 x += width + 10
             }
+            // The compact item after a gap, as the alternative layout.
+            x += 30
+            let compact = CompactStatusView(store: store)
+            compact.modules = MenuBarModule.allCases
+            compact.frame = NSRect(x: x, y: 1, width: compact.preferredWidth, height: 22)
+            container.addSubview(compact)
+            x += compact.preferredWidth + 6
             container.frame.size.width = x
 
             guard let rep = container.bitmapImageRepForCachingDisplay(in: container.bounds) else { continue }

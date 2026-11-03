@@ -9,6 +9,7 @@ enum AppEnvironment {
     static let settings = MenuBarSettings()
     static let updater = Updater()
     static let alerts = AlertMonitor()
+    static let history = HistoryRecorder()
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -32,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         updater: AppEnvironment.updater)
         AppEnvironment.updater.startAutomaticChecks()
         AppEnvironment.alerts.start(store: AppEnvironment.store)
+        AppEnvironment.history.start(store: AppEnvironment.store)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { AppEnvironment.history.saveNow() }
     }
 
     /// The menu bar readouts keep running after the window is closed.
@@ -47,6 +53,7 @@ struct TachoApp: App {
     @StateObject private var settings = AppEnvironment.settings
     @StateObject private var updater = AppEnvironment.updater
     @StateObject private var alerts = AppEnvironment.alerts
+    @StateObject private var history = AppEnvironment.history
 
     init() {
         SettingsMigration.run()
@@ -68,6 +75,7 @@ struct TachoApp: App {
                 .environmentObject(settings)
                 .environmentObject(updater)
                 .environmentObject(alerts)
+                .environmentObject(history)
         }
         .windowToolbarStyle(.unified(showsTitle: true))
 
@@ -77,6 +85,7 @@ struct TachoApp: App {
                 .environmentObject(settings)
                 .environmentObject(updater)
                 .environmentObject(alerts)
+                .environmentObject(history)
         }
     }
 }

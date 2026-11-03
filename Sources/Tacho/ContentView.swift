@@ -11,6 +11,7 @@ enum MonitorSection: String, CaseIterable, Identifiable {
     case disk = "Ổ đĩa"
     case battery = "Pin"
     case network = "Mạng"
+    case history = "Lịch sử"
     case processes = "Tiến trình"
     case settings = "Cài đặt"
 
@@ -27,6 +28,7 @@ enum MonitorSection: String, CaseIterable, Identifiable {
         case .disk: return "internaldrive"
         case .battery: return "battery.100"
         case .network: return "network"
+        case .history: return "clock.arrow.circlepath"
         case .processes: return "list.bullet.rectangle"
         case .settings: return "gearshape"
         }
@@ -83,6 +85,7 @@ struct ContentView: View {
                     case .disk: DiskView()
                     case .battery: BatteryView()
                     case .network: NetworkView()
+                    case .history: HistoryView()
                     case .processes: ProcessesView()
                     case .settings: EmptyView()
                     }

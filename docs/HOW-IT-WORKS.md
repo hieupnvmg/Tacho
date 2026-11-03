@@ -72,6 +72,10 @@ ngay tại chỗ:
 - **Pin** — cục pin vẽ tay, mức đầy đúng theo phần trăm thật (SF Symbol chỉ có 5 nấc
   cố định nên không dùng được), có tia sét khi đang sạc
 
+**Chế độ gọn** (Cài đặt → Hiển thị) gộp mọi chỉ số vào một mục duy nhất (`CompactStatusView`): mỗi
+chỉ số một cột hai dòng, không đồ thị. Bấm vào cột nào thì popover của cột đó mở ngay dưới cột. Một mục
+thay vì sáu nghĩa là macOS chỉ phải chụp lại một mục mỗi giây, nên nhẹ hơn (xem phần Hiệu năng).
+
 Bấm vào mục nào sẽ mở popover chi tiết của chỉ số đó. Popover CPU và Bộ nhớ có thêm 5 app tốn
 CPU / RAM nhất. Mỗi tiến trình được gom về app chứa nó: lấy đường dẫn bằng `proc_pidpath` rồi lấy
 bundle `.app` ngoài cùng, nên mọi renderer của Chrome được cộng vào "Google Chrome". RAM là tổng RSS,
@@ -192,6 +196,24 @@ TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/Ma
 TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-install --no-relaunch
 ```
 
+## Pin thiết bị Bluetooth
+
+Popover Pin liệt kê các thiết bị Bluetooth đang kết nối có báo pin (`Peripherals.swift`):
+
+- Chuột, bàn phím, trackpad của Apple: đọc `BatteryPercent` từ IOKit (`AppleDeviceManagementHIDEventService`).
+- AirPods, Beats và một số tai nghe: chỉ có trong `system_profiler -json SPBluetoothDataType`
+  (pin trái, phải, hộp sạc). Chỉ lấy thiết bị đang kết nối, vì thiết bị đã rời đi vẫn giữ số cũ.
+
+Hai nguồn được gộp theo địa chỉ Bluetooth. Đọc mỗi 60 chu kỳ và ngay khi mở popover Pin.
+
+## Lịch sử 24 giờ
+
+Tab **Lịch sử** trong cửa sổ chính vẽ CPU, nhiệt độ, áp lực bộ nhớ, mạng và pin trong 1 giờ hoặc 24
+giờ qua (Swift Charts). `HistoryRecorder` gộp mẫu mỗi giây thành điểm trung bình mỗi phút, giữ 24 giờ
+(khoảng 1.440 điểm) và lưu vào `~/Library/Application Support/Tacho/history.json`: 10 phút một lần
+và khi thoát app. Xem 24 giờ thì gộp tiếp thành bước 5 phút. Khi máy ngủ hoặc Tacho không chạy, đường
+biểu đồ bị ngắt thay vì nối thẳng qua khoảng trống.
+
 ## Mở cùng máy và cảnh báo
 
 **Mở Tacho khi đăng nhập** dùng `SMAppService.mainApp`, tức danh sách Login Items của macOS. Công tắc
@@ -204,6 +226,7 @@ TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/Ma
 | CPU quá nóng | trung bình ≥ 95°C liên tục 2 phút | xuống dưới 85°C | bật |
 | Pin yếu | ≤ 20% và chưa cắm sạc | cắm sạc hoặc > 25% | bật |
 | Pin đã sạc đầy | cắm sạc và pin đầy | rút sạc | tắt |
+| Pin chuột, bàn phím, tai nghe yếu | một thiết bị Bluetooth ≤ 15% | thiết bị đó > 25% | bật |
 | Ổ đĩa sắp đầy | ổ khởi động trống < 10% | trống > 12% | bật |
 | Mất Internet | offline liên tục 30 giây (cần bật kiểm tra kết nối) | có mạng lại, kèm thông báo "đã có Internet trở lại" | bật |
 
@@ -218,6 +241,7 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
 |---|---|
 | Chỉ có menu bar (cửa sổ đóng hoặc bị che) | ~3% |
 | Cửa sổ chính đang hiện | ~4–5% |
+| Chế độ gọn (một mục menu bar) | ~1,6% |
 
 Những điều đã học được khi tối ưu — đừng đảo ngược:
 
