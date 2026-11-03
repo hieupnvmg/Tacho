@@ -7,9 +7,27 @@ struct SettingsView: View {
     @EnvironmentObject private var settings: MenuBarSettings
     @EnvironmentObject private var store: MonitorStore
     @EnvironmentObject private var updater: Updater
+    @EnvironmentObject private var alerts: AlertMonitor
+    @StateObject private var loginItem = LoginItem()
 
     var body: some View {
         Form {
+            Section(L("Chung")) {
+                Toggle(L("Mở Tacho khi đăng nhập"), isOn: Binding(get: { loginItem.isEnabled },
+                                                                  set: { loginItem.set($0) }))
+                if loginItem.status == .requiresApproval {
+                    HStack {
+                        Text(L("macOS cần bạn cho phép trong Cài đặt hệ thống."))
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button(L("Mở mục Đăng nhập")) { loginItem.openSystemSettings() }
+                    }
+                }
+                if let error = loginItem.error {
+                    Text(error).font(.system(size: 10)).foregroundStyle(Palette.critical)
+                }
+            }
+
             Section(L("Ngôn ngữ")) {
                 Picker(L("Ngôn ngữ"), selection: $settings.language) {
                     ForEach(Language.allCases) { language in
@@ -45,6 +63,29 @@ struct SettingsView: View {
                 }
             }
 
+            Section(L("Cảnh báo khi")) {
+                ForEach(AlertKind.allCases) { kind in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Toggle(kind.title, isOn: Binding(get: { alerts.isEnabled(kind) },
+                                                         set: { alerts.setEnabled(kind, $0) }))
+                        Text(kind.condition)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                if alerts.authorization == .denied {
+                    HStack {
+                        Label(L("Thông báo của Tacho đang bị tắt trong macOS."),
+                              systemImage: "bell.slash")
+                            .font(.system(size: 11)).foregroundStyle(Palette.warning)
+                        Spacer()
+                        Button(L("Mở cài đặt Thông báo")) { Self.openNotificationSettings() }
+                    }
+                } else {
+                    Button(L("Gửi thông báo thử")) { alerts.sendTest() }
+                }
+            }
+
             Section(L("Cập nhật")) {
                 UpdateSection()
             }
@@ -55,6 +96,17 @@ struct SettingsView: View {
         // Strings are looked up while rendering, so a new identity re-renders
         // every one of them in the new language.
         .id(settings.language)
+        .onAppear {
+            loginItem.refresh()
+            alerts.refreshAuthorization()
+        }
+    }
+
+    private static func openNotificationSettings() {
+        let id = Bundle.main.bundleIdentifier ?? ""
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(id)") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func binding(for module: MenuBarModule) -> Binding<Bool> {

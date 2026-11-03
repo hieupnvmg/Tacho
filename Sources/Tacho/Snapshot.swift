@@ -27,7 +27,9 @@ enum SnapshotRenderer {
             Task { await AppEnvironment.updater.check() }
         }
 
-        // Let the collectors fill in a few samples so the graphs are not empty.
+        // Let the collectors fill in a few samples so the graphs are not empty,
+        // including the process lists the CPU and memory popovers show.
+        store.popoverModule = .cpu
         RunLoop.main.run(until: Date().addingTimeInterval(4))
 
         for scheme in [ColorScheme.light, .dark] {

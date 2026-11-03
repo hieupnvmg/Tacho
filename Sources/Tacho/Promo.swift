@@ -12,7 +12,9 @@ enum PromoRenderer {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
         let store = AppEnvironment.store
-        // Enough samples for the graphs to have shape.
+        // Enough samples for the graphs to have shape, and the process lists
+        // the CPU and memory popovers show.
+        store.popoverModule = .cpu
         RunLoop.main.run(until: Date().addingTimeInterval(8))
         store.redactForScreenshots()
 

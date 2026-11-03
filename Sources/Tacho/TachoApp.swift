@@ -8,6 +8,7 @@ enum AppEnvironment {
     static let store = MonitorStore()
     static let settings = MenuBarSettings()
     static let updater = Updater()
+    static let alerts = AlertMonitor()
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         settings: AppEnvironment.settings,
                                         updater: AppEnvironment.updater)
         AppEnvironment.updater.startAutomaticChecks()
+        AppEnvironment.alerts.start(store: AppEnvironment.store)
     }
 
     /// The menu bar readouts keep running after the window is closed.
@@ -44,6 +46,7 @@ struct TachoApp: App {
     @StateObject private var store = AppEnvironment.store
     @StateObject private var settings = AppEnvironment.settings
     @StateObject private var updater = AppEnvironment.updater
+    @StateObject private var alerts = AppEnvironment.alerts
 
     init() {
         SettingsMigration.run()
@@ -64,6 +67,7 @@ struct TachoApp: App {
                 .environmentObject(store)
                 .environmentObject(settings)
                 .environmentObject(updater)
+                .environmentObject(alerts)
         }
         .windowToolbarStyle(.unified(showsTitle: true))
 
@@ -72,6 +76,7 @@ struct TachoApp: App {
                 .environmentObject(store)
                 .environmentObject(settings)
                 .environmentObject(updater)
+                .environmentObject(alerts)
         }
     }
 }

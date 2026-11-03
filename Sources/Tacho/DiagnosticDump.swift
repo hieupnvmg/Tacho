@@ -123,7 +123,7 @@ enum DiagnosticDump {
         print("  out       : \(Fmt.rate(network.outRate))  since start \(Fmt.bytes(network.outBytes))")
 
         print("\nTOP PROCESSES")
-        for process in collector.topProcesses(limit: 8) {
+        for process in collector.processes().prefix(8) {
             let name = process.name.count > 34
                 ? String(process.name.prefix(33)) + "…"
                 : process.name.padding(toLength: 34, withPad: " ", startingAt: 0)

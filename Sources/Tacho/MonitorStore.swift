@@ -10,7 +10,11 @@ final class MonitorStore: ObservableObject {
     @Published private(set) var disk = DiskIOSample()
     @Published private(set) var volumes: [VolumeSample] = []
     @Published private(set) var network = NetworkSample()
+    /// Busiest first, for the Processes tab and the CPU popover.
     @Published private(set) var processes: [ProcessSample] = []
+    /// Apps with their helper processes added up, for the popovers.
+    @Published private(set) var appsByCPU: [AppUsage] = []
+    @Published private(set) var appsByMemory: [AppUsage] = []
     @Published private(set) var connectivity = ConnectivitySample()
     @Published private(set) var swapHistory: [Double] = []
     @Published private(set) var gpu = GPUSample()
@@ -32,9 +36,29 @@ final class MonitorStore: ObservableObject {
     @Published private(set) var netInHistory: [Double] = []
     @Published private(set) var netOutHistory: [Double] = []
 
-    /// Called after every sample so the menu bar readouts can redraw. They are
-    /// AppKit views, which SwiftUI does not refresh on its own.
-    var onSample: (() -> Void)?
+    /// Run after every sample: the menu bar readouts are AppKit views, which
+    /// SwiftUI does not refresh on its own, and alerts check their thresholds.
+    private var sampleObservers: [() -> Void] = []
+
+    func onEachSample(_ observer: @escaping () -> Void) {
+        sampleObservers.append(observer)
+    }
+
+    private func notifySample() {
+        for observer in sampleObservers { observer() }
+    }
+
+    /// The module whose popover is open. The CPU and memory popovers list the
+    /// heaviest processes, which are otherwise only fetched for their tab.
+    var popoverModule: MenuBarModule? {
+        didSet {
+            if wantsProcessList && popoverModule != oldValue { fetchProcesses() }
+        }
+    }
+
+    private var wantsProcessList: Bool {
+        section == .processes || popoverModule == .cpu || popoverModule == .memory
+    }
 
     @Published var section: MonitorSection? = .overview
 
@@ -70,7 +94,7 @@ final class MonitorStore: ObservableObject {
         connectivityMonitor.onChange = { [weak self] sample in
             guard let self else { return }
             self.connectivity = sample
-            self.onSample?()
+            self.notifySample()
         }
         // Deliberately not started here: the probe is the app's only outbound
         // request, so it waits for the setting to turn it on.
@@ -86,7 +110,7 @@ final class MonitorStore: ObservableObject {
         } else {
             connectivityMonitor.stop()
             connectivity = ConnectivitySample(status: .pending)
-            onSample?()
+            notifySample()
         }
     }
 
@@ -107,8 +131,8 @@ final class MonitorStore: ObservableObject {
     private func sample() {
         tick += 1
         // Spawning ps is the most expensive part of a sample, and only the
-        // Processes tab shows the result.
-        let wantsProcesses = section == .processes && (tick % 3 == 1 || processes.isEmpty)
+        // Processes tab and the CPU and memory popovers show the result.
+        let wantsProcesses = wantsProcessList && (tick % 3 == 1 || processes.isEmpty)
         let wantsVolumes = tick % 30 == 1
         // Die temperature and fan speed drift over seconds; each of the ~35
         // SMC keys is a kernel round trip, so they are read every third tick.
@@ -127,7 +151,7 @@ final class MonitorStore: ObservableObject {
             let temperature = wantsThermal ? collector.temperature() : nil
             let disk = collector.diskIO()
             let network = collector.network()
-            let processes = wantsProcesses ? collector.topProcesses() : nil
+            let processes = wantsProcesses ? ProcessRanking(collector.processes()) : nil
             let volumes = wantsVolumes ? collector.volumes() : nil
             let drives = wantsDrives ? collector.drives() : nil
             let battery = wantsBattery ? collector.battery() : nil
@@ -143,7 +167,7 @@ final class MonitorStore: ObservableObject {
                 self.disk = disk
                 self.network = network
                 self.info.uptime = uptime
-                if let processes { self.processes = processes }
+                if let processes { self.apply(processes) }
                 if let volumes { self.volumes = volumes }
                 if let drives { self.drives = drives }
                 if let battery { self.battery = battery }
@@ -167,9 +191,24 @@ final class MonitorStore: ObservableObject {
                 Self.append(&self.netInHistory, network.inRate)
                 Self.append(&self.netOutHistory, network.outRate)
 
-                self.onSample?()
+                self.notifySample()
             }
         }
+    }
+
+    /// Straight away, so an opened popover does not wait for the next round.
+    private func fetchProcesses() {
+        let collector = self.collector
+        queue.async {
+            let ranking = ProcessRanking(collector.processes())
+            Task { @MainActor [weak self] in self?.apply(ranking) }
+        }
+    }
+
+    private func apply(_ ranking: ProcessRanking) {
+        processes = ranking.byCPU
+        appsByCPU = ranking.appsByCPU
+        appsByMemory = ranking.appsByMemory
     }
 
     /// For images that get published (`--promo`): swaps values that identify
@@ -183,6 +222,26 @@ final class MonitorStore: ObservableObject {
         link.interfaceKind = "Wi-Fi"
         link.lastChecked = Date()
         connectivity = link
+        // What runs on this Mac is nobody else's business: keep the numbers,
+        // swap the names for Apple's own apps.
+        let names = ["Safari", "Music", "Photos", "Mail", "Notes", "Maps", "Preview",
+                     "Calendar", "Messages", "Podcasts", "Books", "FaceTime"]
+        processes = processes.enumerated().map { index, process in
+            ProcessSample(pid: Int32.max - Int32(index), name: names[index % names.count],
+                          cpu: process.cpu, memory: process.memory)
+        }
+        func anonymise(_ list: [AppUsage], offset: Int) -> [AppUsage] {
+            list.enumerated().map { index, app in
+                let name = names[(index + offset) % names.count]
+                let path = ["/System/Applications", "/Applications", "/System/Volumes/Preboot/Cryptexes/App/System/Applications"]
+                    .map { "\($0)/\(name).app" }
+                    .first { FileManager.default.fileExists(atPath: $0) }
+                return AppUsage(id: name, name: name, bundlePath: path,
+                                cpu: app.cpu, memory: app.memory, processCount: app.processCount)
+            }
+        }
+        appsByCPU = anonymise(appsByCPU, offset: 0)
+        appsByMemory = anonymise(appsByMemory, offset: 3)
         drives = drives.map {
             DriveSample(name: $0.name, vendor: $0.vendor, revision: $0.revision, serial: "",
                         bsdName: $0.bsdName, mediumType: $0.mediumType,

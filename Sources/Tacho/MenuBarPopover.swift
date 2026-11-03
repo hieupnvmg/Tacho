@@ -93,6 +93,7 @@ struct MenuBarPopover: View {
                 fanRow(fan)
             }
             topCores
+            ProcessList(title: L("Tốn CPU nhất"), apps: store.appsByCPU, metric: .cpu)
 
         case .gpu:
             Sparkline(values: store.gpuHistory, color: Palette.gpu,
@@ -224,6 +225,8 @@ struct MenuBarPopover: View {
                     .monospacedDigit()
                     .foregroundStyle(.tertiary)
             }
+
+            ProcessList(title: L("Tốn RAM nhất"), apps: store.appsByMemory, metric: .memory)
         }
     }
 
@@ -645,5 +648,99 @@ struct MenuBarPopover: View {
         guard let menu = NSApp.mainMenu, let (owner, index) = search(menu) else { return false }
         owner.performActionForItem(at: index)
         return true
+    }
+}
+
+/// The few apps behind a busy CPU or a full RAM, each with its helper
+/// processes counted in, as Activity Monitor's app view does.
+private struct ProcessList: View {
+    enum Metric { case cpu, memory }
+
+    let title: String
+    let apps: [AppUsage]
+    let metric: Metric
+
+    /// Loading an icon from disk on every redraw would be wasteful.
+    private static var icons: [String: NSImage] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Divider()
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            if apps.isEmpty {
+                Text(L("Đang lấy danh sách…"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            ForEach(apps) { row($0) }
+        }
+    }
+
+    private func row(_ app: AppUsage) -> some View {
+        HStack(spacing: 7) {
+            Group {
+                if let icon = Self.icon(for: app) {
+                    Image(nsImage: icon).resizable()
+                } else {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 16, height: 16)
+
+            Text(app.name)
+                .font(.system(size: 11))
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if app.processCount > 1 {
+                Text(verbatim: "×\(app.processCount)")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 6)
+            MeterBar(fraction: fraction(app), color: color(app), height: 4)
+                .frame(width: 46)
+            Text(value(app))
+                .font(.system(size: 11, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(color(app))
+                .frame(width: 58, alignment: .trailing)
+        }
+    }
+
+    private static func icon(for app: AppUsage) -> NSImage? {
+        guard let path = app.bundlePath else { return nil }
+        if let cached = icons[path] { return cached }
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        icons[path] = icon
+        return icon
+    }
+
+    private func value(_ app: AppUsage) -> String {
+        switch metric {
+        case .cpu: return String(format: "%.0f%%", app.cpu)
+        case .memory: return Fmt.bytes(app.memory)
+        }
+    }
+
+    /// One core's worth (100%) fills the CPU bar; the RAM bar is measured
+    /// against the heaviest app shown.
+    private func fraction(_ app: AppUsage) -> Double {
+        switch metric {
+        case .cpu: return min(app.cpu / 100, 1)
+        case .memory:
+            let top = Double(apps.first?.memory ?? 1)
+            return top > 0 ? Double(app.memory) / top : 0
+        }
+    }
+
+    private func color(_ app: AppUsage) -> Color {
+        switch metric {
+        case .cpu: return app.cpu > 80 ? Palette.critical : app.cpu > 40 ? Palette.warning : Palette.cpu
+        case .memory: return Palette.memory
+        }
     }
 }

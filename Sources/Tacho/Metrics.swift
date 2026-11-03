@@ -271,6 +271,57 @@ struct ProcessSample: Identifiable {
     let memory: UInt64   // resident bytes
 }
 
+/// One app's share of the machine: every process inside its bundle (helpers,
+/// renderers, XPC services) added up, or a lone process outside any app.
+struct AppUsage: Identifiable {
+    /// The app bundle's path, or the process name for one outside any app.
+    let id: String
+    let name: String
+    let bundlePath: String?
+    var cpu: Double
+    var memory: UInt64
+    var processCount: Int
+}
+
+/// The views of the process table the interface shows.
+struct ProcessRanking {
+    /// Busiest single processes, for the Processes tab.
+    let byCPU: [ProcessSample]
+    /// Busiest and largest apps, for the popovers.
+    let appsByCPU: [AppUsage]
+    let appsByMemory: [AppUsage]
+
+    init(_ all: [ProcessSample]) {
+        byCPU = Array(all.prefix(12))
+        var apps: [String: AppUsage] = [:]
+        for process in all {
+            let bundle = Self.outermostApp(of: process.pid)
+            let key = bundle ?? process.name
+            if apps[key] == nil {
+                let name = bundle.map { (($0 as NSString).lastPathComponent as NSString).deletingPathExtension }
+                apps[key] = AppUsage(id: key, name: name ?? process.name, bundlePath: bundle,
+                                     cpu: 0, memory: 0, processCount: 0)
+            }
+            apps[key]?.cpu += process.cpu
+            apps[key]?.memory += process.memory
+            apps[key]?.processCount += 1
+        }
+        appsByCPU = Array(apps.values.sorted { $0.cpu > $1.cpu }.prefix(5))
+        appsByMemory = Array(apps.values.sorted { $0.memory > $1.memory }.prefix(5))
+    }
+
+    /// Chrome's renderers live at …/Google Chrome.app/Contents/Frameworks/…/
+    /// Google Chrome Helper (Renderer).app; the outermost bundle is the app
+    /// the user knows.
+    private static func outermostApp(of pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        let path = String(cString: buffer)
+        guard let range = path.range(of: ".app/") else { return nil }
+        return String(path[..<range.lowerBound]) + ".app"
+    }
+}
+
 struct SystemInfo {
     var model = ""
     var chip = ""
@@ -998,7 +1049,8 @@ final class MetricsCollector {
 
     // MARK: Processes
 
-    func topProcesses(limit: Int = 12) -> [ProcessSample] {
+    /// Every process, busiest first.
+    func processes() -> [ProcessSample] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
         process.arguments = ["-Aceo", "pid,pcpu,rss,comm", "-r"]
@@ -1025,7 +1077,6 @@ final class MetricsCollector {
                                         name: String(parts[3]).trimmingCharacters(in: .whitespaces),
                                         cpu: cpu,
                                         memory: rss * 1024))
-            if result.count >= limit { break }
         }
         return result
     }

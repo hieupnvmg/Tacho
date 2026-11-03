@@ -72,7 +72,11 @@ ngay tại chỗ:
 - **Pin** — cục pin vẽ tay, mức đầy đúng theo phần trăm thật (SF Symbol chỉ có 5 nấc
   cố định nên không dùng được), có tia sét khi đang sạc
 
-Bấm vào mục nào sẽ mở popover chi tiết của chỉ số đó. Chọn mục nào hiện, bật/tắt
+Bấm vào mục nào sẽ mở popover chi tiết của chỉ số đó. Popover CPU và Bộ nhớ có thêm 5 app tốn
+CPU / RAM nhất. Mỗi tiến trình được gom về app chứa nó: lấy đường dẫn bằng `proc_pidpath` rồi lấy
+bundle `.app` ngoài cùng, nên mọi renderer của Chrome được cộng vào "Google Chrome". RAM là tổng RSS,
+nên cao hơn số của Activity Monitor một chút, vì bộ nhớ dùng chung bị cộng nhiều lần. Danh sách chỉ
+được lấy khi popover đang mở (hoặc tab Tiến trình đang hiện), 3 chu kỳ một lần. Chọn mục nào hiện, bật/tắt
 đồ thị, ẩn icon khỏi Dock và đổi tần suất lấy mẫu trong **Cài đặt** (`⌘,`).
 Mặc định bật CPU, Bộ nhớ, Mạng và Kết nối (nên app gọi ra Cloudflare ngay từ lần chạy đầu — xem phần bên dưới để tắt).
 
@@ -187,6 +191,24 @@ rồi chạy
 TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-check
 TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-install --no-relaunch
 ```
+
+## Mở cùng máy và cảnh báo
+
+**Mở Tacho khi đăng nhập** dùng `SMAppService.mainApp`, tức danh sách Login Items của macOS. Công tắc
+đọc trạng thái từ hệ thống, không lưu riêng, nên luôn khớp với System Settings.
+
+**Cảnh báo** (`Alerts.swift`) chạy sau mỗi lần lấy mẫu và gửi thông báo qua `UserNotifications`:
+
+| Cảnh báo | Bắn khi | Bật lại khi | Mặc định |
+|---|---|---|---|
+| CPU quá nóng | trung bình ≥ 95°C liên tục 2 phút | xuống dưới 85°C | bật |
+| Pin yếu | ≤ 20% và chưa cắm sạc | cắm sạc hoặc > 25% | bật |
+| Pin đã sạc đầy | cắm sạc và pin đầy | rút sạc | tắt |
+| Ổ đĩa sắp đầy | ổ khởi động trống < 10% | trống > 12% | bật |
+| Mất Internet | offline liên tục 30 giây (cần bật kiểm tra kết nối) | có mạng lại, kèm thông báo "đã có Internet trở lại" | bật |
+
+Mỗi cảnh báo chỉ bắn một lần cho mỗi lần sự cố xảy ra. Khoảng chênh giữa ngưỡng bắn và ngưỡng bật
+lại để số đo dao động quanh ngưỡng không gây ra một loạt thông báo.
 
 ## Hiệu năng
 

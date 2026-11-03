@@ -53,7 +53,7 @@ final class StatusBarController: NSObject {
             .sink { [weak store] enabled in store?.setConnectivityEnabled(enabled) }
             .store(in: &cancellables)
 
-        store.onSample = { [weak self] in self?.refresh() }
+        store.onEachSample { [weak self] in self?.refresh() }
         sync(to: settings.enabled)
     }
 
@@ -152,6 +152,7 @@ final class StatusBarController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         openModule = module
+        store.popoverModule = module
         popover.contentViewController?.view.window?.makeKey()
     }
 }
@@ -166,6 +167,7 @@ extension StatusBarController: NSPopoverDelegate {
                 lastClosed = (module, Date())
             }
             openModule = nil
+            store.popoverModule = nil
         }
     }
 }

@@ -69,6 +69,10 @@ Giao diện sáng và tối theo macOS.
 
 ## Và còn nữa
 
+- **Biết ngay app nào đang ngốn máy** — bấm vào CPU hoặc RAM là thấy 5 app nặng nhất, các tiến trình
+  phụ (như renderer của Chrome) được cộng gộp về đúng app
+- **Cảnh báo kịp lúc** — CPU quá nóng, pin yếu, ổ đĩa sắp đầy, mất Internet; bật/tắt từng loại
+- **Mở cùng máy** — một công tắc trong Cài đặt
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
 - **Nhẹ** — bản tải về chưa tới 3 MB, không chạy animation thừa
 - **Riêng tư** — mọi số liệu đọc ngay trên máy; chỉ gọi mạng để kiểm tra Internet và bản cập nhật,

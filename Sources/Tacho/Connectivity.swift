@@ -57,6 +57,7 @@ final class ConnectivityMonitor {
     /// A cancelled `NWPathMonitor` cannot be started again, so each `start()`
     /// gets a fresh one.
     private var monitor: NWPathMonitor?
+    var isRunning: Bool { monitor != nil }
     private let monitorQueue = DispatchQueue(label: "tacho.connectivity")
     private var timer: Timer?
     private var probing = false
