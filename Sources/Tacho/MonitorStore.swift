@@ -99,6 +99,9 @@ final class MonitorStore: ObservableObject {
             self.connectivity = sample
             self.notifySample()
         }
+        peripheralWatcher = PeripheralWatcher { [weak self] in
+            Task { @MainActor in self?.peripheralsChanged() }
+        }
         // Deliberately not started here: the probe is the app's only outbound
         // request, so it waits for the setting to turn it on.
         restartTimer()
@@ -210,6 +213,20 @@ final class MonitorStore: ObservableObject {
         queue.async {
             let ranking = ProcessRanking(collector.processes())
             Task { @MainActor [weak self] in self?.apply(ranking) }
+        }
+    }
+
+    private var peripheralWatcher: PeripheralWatcher?
+    private var peripheralRefresh: [DispatchWorkItem] = []
+
+    /// An accessory came or went. Its battery shows up in system_profiler a
+    /// few seconds after the connection, so read twice.
+    private func peripheralsChanged() {
+        peripheralRefresh.forEach { $0.cancel() }
+        peripheralRefresh = [2.0, 7.0].map { delay in
+            let work = DispatchWorkItem { [weak self] in self?.fetchPeripherals() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+            return work
         }
     }
 

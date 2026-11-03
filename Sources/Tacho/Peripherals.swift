@@ -1,5 +1,6 @@
 import Foundation
 import IOKit
+import CoreAudio
 
 /// A connected Bluetooth accessory that reports its battery.
 struct PeripheralSample: Identifiable {
@@ -145,5 +146,62 @@ enum PeripheralReader {
             }
         }
         return result
+    }
+}
+
+/// Calls back as soon as an accessory connects or goes away, so its battery is
+/// read then instead of at the next minute-long refresh. Neither source needs
+/// a permission: AirPods and headsets show up as audio devices, mice and
+/// keyboards as HID services that report a battery.
+final class PeripheralWatcher {
+    private let onChange: () -> Void
+    private var port: IONotificationPortRef?
+    private var iterators: [io_iterator_t] = []
+    private var audioListener: AudioObjectPropertyListenerBlock?
+    private var audioAddress = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                                          mScope: kAudioObjectPropertyScopeGlobal,
+                                                          mElement: kAudioObjectPropertyElementMain)
+
+    init(onChange: @escaping () -> Void) {
+        self.onChange = onChange
+
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.onChange() }
+        if AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &audioAddress,
+                                               .main, listener) == noErr {
+            audioListener = listener
+        }
+
+        guard let port = IONotificationPortCreate(kIOMainPortDefault) else { return }
+        self.port = port
+        CFRunLoopAddSource(CFRunLoopGetMain(), IONotificationPortGetRunLoopSource(port).takeUnretainedValue(),
+                           .defaultMode)
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        for type in [kIOFirstMatchNotification, kIOTerminatedNotification] {
+            var iterator: io_iterator_t = 0
+            let result = IOServiceAddMatchingNotification(port, type,
+                                                          IOServiceMatching("AppleDeviceManagementHIDEventService"),
+                                                          { context, iterator in
+                PeripheralWatcher.drain(iterator)
+                guard let context else { return }
+                Unmanaged<PeripheralWatcher>.fromOpaque(context).takeUnretainedValue().onChange()
+            }, context, &iterator)
+            guard result == KERN_SUCCESS else { continue }
+            // The notification only arms once the existing matches are read.
+            Self.drain(iterator)
+            iterators.append(iterator)
+        }
+    }
+
+    deinit {
+        if let audioListener {
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &audioAddress,
+                                                   .main, audioListener)
+        }
+        iterators.forEach { IOObjectRelease($0) }
+        if let port { IONotificationPortDestroy(port) }
+    }
+
+    private static func drain(_ iterator: io_iterator_t) {
+        while case let service = IOIteratorNext(iterator), service != 0 { IOObjectRelease(service) }
     }
 }

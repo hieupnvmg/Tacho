@@ -23,7 +23,7 @@ struct MenuBarPopover: View {
 
             Divider()
             HStack(spacing: 10) {
-                Button(L("Cửa sổ chính")) { openMainWindow() }
+                Button(L("Cửa sổ chính")) { Self.openMainWindow() }
                 Button(L("Cài đặt")) { openSettings() }
                 Spacer()
                 Button(L("Thoát")) { NSApp.terminate(nil) }
@@ -608,7 +608,7 @@ struct MenuBarPopover: View {
 
     /// Leaves the activation policy alone: the Dock icon follows the setting,
     /// and an accessory app can still bring a window to the front.
-    private func openMainWindow() {
+    static func openMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
         let main = NSApp.windows.first {
             $0.canBecomeMain && !($0 is NSPanel)
@@ -629,7 +629,7 @@ struct MenuBarPopover: View {
     /// Settings live in the main window as their own tab.
     private func openSettings() {
         store.section = .settings
-        openMainWindow()
+        Self.openMainWindow()
     }
 
     /// Fires the first ⌘-<key> item found anywhere in the main menu.

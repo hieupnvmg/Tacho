@@ -69,6 +69,26 @@ struct SettingsView: View {
                 }
             }
 
+            Section(L("Tai thỏ (notch)")) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Báo sự kiện ở tai thỏ"), isOn: $settings.notchEvents)
+                    Text(L("Cắm hoặc rút sạc, kết nối chuột, bàn phím, tai nghe, mất hoặc có mạng lại, cuộc gọi bắt đầu hoặc kết thúc: tai thỏ giãn ra hai bên trong vài giây."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Rê chuột vào tai thỏ để mở bảng điều khiển"), isOn: $settings.notchPeek)
+                    Text(L("Bài đang phát với nút điều khiển (YouTube, Spotify, Nhạc…), chọn loa hoặc tai nghe để phát ra, và cuộc gọi đang diễn ra (Teams, Zoom…)."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                if NotchGeometry.current() == nil {
+                    Text(L("Màn hình hiện tại không có tai thỏ, nên chưa thấy gì."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(Palette.warning)
+                }
+            }
+
             Section(L("Cảnh báo khi")) {
                 ForEach(AlertKind.allCases) { kind in
                     VStack(alignment: .leading, spacing: 2) {

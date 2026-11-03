@@ -55,6 +55,10 @@ final class MenuBarSettings: ObservableObject {
     @Published var showGraphs: Bool { didSet { persist() } }
     /// All readouts in one menu bar item instead of one item each.
     @Published var compact: Bool { didSet { persist() } }
+    /// Short events (charger, accessories, connection) grow out of the notch.
+    @Published var notchEvents: Bool { didSet { persist() } }
+    /// Resting the pointer on the notch opens a small dashboard there.
+    @Published var notchPeek: Bool { didSet { persist() } }
     /// Controls the only outbound request the app makes. Off means the app
     /// talks to nothing outside this machine.
     @Published var checkConnectivity: Bool { didSet { persist() } }
@@ -74,6 +78,8 @@ final class MenuBarSettings: ObservableObject {
     private static let enabledKey = "menubar.enabled"
     private static let graphsKey = "menubar.showGraphs"
     private static let compactKey = "menubar.compact"
+    private static let notchEventsKey = "notch.events"
+    private static let notchPeekKey = "notch.peek"
     private static let dockKey = "menubar.hideDockIcon"
     private static let probeKey = "network.checkConnectivity"
     /// Every module this install has already seen, so later additions can be
@@ -100,6 +106,8 @@ final class MenuBarSettings: ObservableObject {
         }
         showGraphs = defaults.object(forKey: Self.graphsKey) as? Bool ?? true
         compact = defaults.bool(forKey: Self.compactKey)
+        notchEvents = defaults.bool(forKey: Self.notchEventsKey)
+        notchPeek = defaults.bool(forKey: Self.notchPeekKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
         checkConnectivity = defaults.object(forKey: Self.probeKey) as? Bool ?? true
         language = L10n.current
@@ -134,6 +142,8 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(enabled.map(\.rawValue), forKey: Self.enabledKey)
         defaults.set(showGraphs, forKey: Self.graphsKey)
         defaults.set(compact, forKey: Self.compactKey)
+        defaults.set(notchEvents, forKey: Self.notchEventsKey)
+        defaults.set(notchPeek, forKey: Self.notchPeekKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)
         defaults.set(checkConnectivity, forKey: Self.probeKey)
         defaults.set(language.rawValue, forKey: L10n.defaultsKey)

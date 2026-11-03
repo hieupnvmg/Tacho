@@ -14,6 +14,7 @@ enum AppEnvironment {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
+    private var notch: NotchController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
@@ -31,6 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBar = StatusBarController(store: AppEnvironment.store,
                                         settings: AppEnvironment.settings,
                                         updater: AppEnvironment.updater)
+        notch = NotchController(store: AppEnvironment.store, settings: AppEnvironment.settings)
+        if arguments.contains("--notch-demo") { notch?.runDemo() }
         AppEnvironment.updater.startAutomaticChecks()
         AppEnvironment.alerts.start(store: AppEnvironment.store)
         AppEnvironment.history.start(store: AppEnvironment.store)

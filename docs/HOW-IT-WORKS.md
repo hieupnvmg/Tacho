@@ -233,6 +233,56 @@ biểu đồ bị ngắt thay vì nối thẳng qua khoảng trống.
 Mỗi cảnh báo chỉ bắn một lần cho mỗi lần sự cố xảy ra. Khoảng chênh giữa ngưỡng bắn và ngưỡng bật
 lại để số đo dao động quanh ngưỡng không gây ra một loạt thông báo.
 
+## Tai thỏ (notch)
+
+`Notch.swift`, bật trong Cài đặt › Tai thỏ, mặc định tắt cả hai:
+
+- **Báo sự kiện:** cắm hoặc rút sạc, một thiết bị Bluetooth vừa kết nối, mất mạng hoặc có mạng lại,
+  cuộc gọi bắt đầu (tên app) hoặc kết thúc (thời lượng). Tai thỏ giãn ngang thành hai "cánh", biểu
+  tượng bên trái, chữ bên phải, trong 3 giây. Nhiều sự kiện liền nhau được xếp hàng, hiện lần lượt.
+  - Sạc: `IOPSNotificationCreateRunLoopSource`, báo ngay.
+  - Bluetooth: `PeripheralWatcher` nghe danh sách thiết bị âm thanh của CoreAudio (AirPods, tai nghe)
+    và thông báo IOKit cho `AppleDeviceManagementHIDEventService` (chuột, bàn phím), rồi đọc pin sau
+    2 và 7 giây vì AirPods báo pin hơi trễ.
+- **Rê chuột để mở bảng:** để con trỏ trên tai thỏ khoảng 0,2 giây. Rời ra ngoài thì tự đóng.
+  - **Cuộc gọi** (`CallDetector`): app nào đang giữ micro, đọc từ danh sách tiến trình của CoreAudio
+    (`kAudioHardwarePropertyProcessObjectList`, `kAudioProcessPropertyIsRunningInput`, cần macOS
+    14.2). Tiến trình phụ như `com.microsoft.teams2.helper` được quy về app chính. Bỏ qua tiến trình
+    `com.apple.*` (Siri, đọc chính tả) trừ FaceTime. Micro rảnh 8 giây liên tục mới coi là hết cuộc
+    gọi, vì tắt tiếng có thể nhả micro một lúc. Tên cuộc họp lấy từ tiêu đề cửa sổ, chỉ đọc được khi
+    Tacho có quyền Ghi màn hình; không có thì ghi "Đang trong cuộc gọi". Kiểm tra mỗi 2 giây khi bật
+    một trong hai công tắc tai thỏ.
+  - **Bài đang phát** (`NowPlayingStream`): đọc "Now Playing" của macOS, cùng nguồn với Trung tâm
+    điều khiển, nên YouTube trong trình duyệt hay web app cũng được, không riêng Spotify và Nhạc.
+    Framework MediaRemote đứng sau nó không trả lời app ngoài Apple từ macOS 15.4, nhưng vẫn trả lời
+    `/usr/bin/osascript` của Apple. Vì vậy khi bảng mở, Tacho chạy một vòng JavaScript for Automation
+    trong osascript, in một dòng JSON mỗi 0,5 giây (ảnh bìa chỉ gửi khi đổi bài), và dừng nó khi bảng
+    đóng. Đọc không cần quyền nào. Nếu nguồn không có ảnh bìa (YouTube), hiện icon của app.
+  - **Nút lùi, phát/dừng, tới** (`MediaKeys`) gửi phím media giả lập (`NX_KEYTYPE_PLAY/NEXT/PREVIOUS`),
+    y như bấm phím trên bàn phím, nên tới đúng app đang phát. `MRMediaRemoteSendCommand` không dùng
+    được: gọi từ app ngoài Apple thì bị bỏ qua, gọi qua osascript thì lúc ăn lúc không (YouTube dừng
+    được nhưng không phát lại). Phím giả lập cần quyền Trợ năng; bấm nút lần đầu thì macOS hỏi, và bảng
+    hiện dòng nhắc cho tới khi có quyền. Bản build ký ad-hoc nên mỗi bản mới có thể phải cấp lại.
+  - **Phát ra:** danh sách thiết bị CoreAudio có đầu ra, bỏ thiết bị ảo (driver của Teams, Zoom) và
+    thiết bị gộp. Bấm là đổi thiết bị mặc định (`kAudioHardwarePropertyDefaultOutputDevice`).
+  - Bài hát và danh sách loa chỉ được đọc mỗi giây trong lúc bảng đang mở.
+
+Cách làm:
+
+- Vị trí và kích thước tai thỏ lấy từ `NSScreen.safeAreaInsets` và `auxiliaryTopLeftArea` /
+  `auxiliaryTopRightArea`. Màn hình không có tai thỏ (hoặc gập máy dùng màn rời) thì không hiện gì.
+- Một `NSPanel` không viền, không lấy focus, đặt trên thanh menu. Không có
+  `.fullScreenAuxiliary` nên không đè lên app toàn màn hình.
+- `NotchShape` có hai bán kính animate được: vai lõm ở hai góc trên để hoà vào mép màn hình, và góc
+  bo phía dưới. Nhờ vậy hình đổi dáng chứ không chỉ kéo giãn. Mở dùng spring hơi nảy, đóng dùng spring
+  không nảy. Nội dung hiện sau hình một nhịp, rõ dần từ mờ (blur), các ô lần lượt trượt vào. Bật
+  Giảm chuyển động (Reduce Motion) thì chỉ mờ dần.
+- Mọi hiệu ứng bắt đầu và kết thúc ở trạng thái "idle": hình đen nhỏ hơn tai thỏ thật một chút, nằm
+  khuất sau phần cứng. Xong là `orderOut`, nên lúc không hiện gì panel không được vẽ.
+- Theo dõi con trỏ bằng `NSEvent` global monitor cho `mouseMoved`, không cần quyền Accessibility (chỉ
+  phím bấm mới cần).
+- Chạy thử mọi trạng thái: `open dist/Tacho.app --args --notch-demo`.
+
 ## Hiệu năng
 
 Đo bằng thời gian CPU của tiến trình trong 30 giây, trên MacBook Pro M1 Pro, lấy mẫu 1 giây/lần:
@@ -242,6 +292,7 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
 | Chỉ có menu bar (cửa sổ đóng hoặc bị che) | ~3% |
 | Cửa sổ chính đang hiện | ~4–5% |
 | Chế độ gọn (một mục menu bar) | ~1,6% |
+| Bật tai thỏ, lúc không hiện gì | không đo được khác biệt |
 
 Những điều đã học được khi tối ưu — đừng đảo ngược:
 
