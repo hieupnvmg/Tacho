@@ -63,6 +63,7 @@ struct TachoApp: App {
             ContentView()
                 .environmentObject(store)
                 .environmentObject(settings)
+                .environmentObject(updater)
         }
         .windowToolbarStyle(.unified(showsTitle: true))
 

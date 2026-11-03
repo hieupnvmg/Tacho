@@ -783,7 +783,8 @@ final class MetricsCollector {
     /// asking system_profiler is the only way to match what the user sees. It
     /// takes about a second, hence the cache.
     private func batteryHealthInfo() -> (condition: String, maximumCapacity: Int) {
-        if let cached = cachedBatteryHealth, Date().timeIntervalSince(cached.time) < 60 {
+        // Maximum capacity moves over weeks; system_profiler costs about a second.
+        if let cached = cachedBatteryHealth, Date().timeIntervalSince(cached.time) < 30 * 60 {
             return (cached.condition, cached.maximumCapacity)
         }
 

@@ -7,7 +7,19 @@ final class StatusItemView: NSView {
 
     let module: MenuBarModule
     weak var store: MonitorStore?
-    var showGraph = true
+    var showGraph = true {
+        didSet { drawnSignature = nil }
+    }
+
+    /// What was on screen at the last draw. macOS snapshots a status item for
+    /// every menu bar it appears in each time it redraws, which costs far more
+    /// than the drawing itself, so unchanged items are not redrawn at all.
+    ///
+    /// Deliberately no `viewDidChangeEffectiveAppearance` hook clearing this:
+    /// those snapshots switch the view's appearance per display, so the hook
+    /// fired on every snapshot and redrew every item ~11 times a second.
+    /// AppKit already redraws a view whose appearance really changes.
+    private var drawnSignature: String?
 
     private let graphWidth: CGFloat = 26
     private let spacing: CGFloat = 4
@@ -25,15 +37,33 @@ final class StatusItemView: NSView {
     /// Clicks belong to the status item button underneath.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
+
     // MARK: Fonts
 
-    private var singleLineFont: NSFont {
-        .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    // Built once: creating a system font and converting a SwiftUI colour are
+    // both slow enough to show up when six items redraw every second.
+    private static let singleLine = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    private static let doubleLine = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private static let colors: [String: NSColor] = [
+        "cpu": NSColor(Palette.cpu), "gpu": NSColor(Palette.gpu),
+        "read": NSColor(Palette.read), "write": NSColor(Palette.write),
+        "netIn": NSColor(Palette.netIn), "netOut": NSColor(Palette.netOut),
+        "memory": NSColor(Palette.memory), "warning": NSColor(Palette.warning),
+        "critical": NSColor(Palette.critical),
+    ]
+
+    private static func color(_ name: String) -> NSColor { colors[name] ?? .labelColor }
+
+    private static func pressureColor(_ level: MemoryPressureLevel) -> NSColor {
+        switch level {
+        case .normal: return color("memory")
+        case .warning: return color("warning")
+        case .critical: return color("critical")
+        }
     }
 
-    private var doubleLineFont: NSFont {
-        .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-    }
+    private var singleLineFont: NSFont { Self.singleLine }
+    private var doubleLineFont: NSFont { Self.doubleLine }
 
     private func attributes(_ font: NSFont, _ color: NSColor = .labelColor) -> [NSAttributedString.Key: Any] {
         [.font: font, .foregroundColor: color]
@@ -73,8 +103,8 @@ final class StatusItemView: NSView {
         let color: NSColor
         switch celsius {
         case ..<70: color = .secondaryLabelColor
-        case ..<90: color = NSColor(Palette.warning)
-        default: color = NSColor(Palette.critical)
+        case ..<90: color = Self.color("warning")
+        default: color = Self.color("critical")
         }
         return (String(format: " %.0f°", celsius), color)
     }
@@ -84,19 +114,19 @@ final class StatusItemView: NSView {
         guard showGraph, let store else { return [] }
         switch module {
         case .cpu:
-            return [(store.cpuHistory, NSColor(Palette.cpu))]
+            return [(store.cpuHistory, Self.color("cpu"))]
         case .gpu:
-            return [(store.gpuHistory, NSColor(Palette.gpu))]
+            return [(store.gpuHistory, Self.color("gpu"))]
         case .memory:
             // Pressure, not the share of RAM in use: that is what tells you
             // whether the machine is actually struggling.
-            return [(store.pressureHistory, NSColor(Palette.pressure(store.memory.pressureLevel)))]
+            return [(store.pressureHistory, Self.pressureColor(store.memory.pressureLevel))]
         case .disk:
-            return [(store.diskReadHistory, NSColor(Palette.read)),
-                    (store.diskWriteHistory, NSColor(Palette.write))]
+            return [(store.diskReadHistory, Self.color("read")),
+                    (store.diskWriteHistory, Self.color("write"))]
         case .network:
-            return [(store.netInHistory, NSColor(Palette.netIn)),
-                    (store.netOutHistory, NSColor(Palette.netOut))]
+            return [(store.netInHistory, Self.color("netIn")),
+                    (store.netOutHistory, Self.color("netOut"))]
         case .battery, .connectivity:
             return []
         }
@@ -117,9 +147,9 @@ final class StatusItemView: NSView {
         guard let store else { return }
         let color: NSColor
         switch store.connectivity.status {
-        case .online: color = NSColor(Palette.memory)
-        case .offline: color = NSColor(Palette.critical)
-        case .pending: color = NSColor(Palette.warning)
+        case .online: color = Self.color("memory")
+        case .offline: color = Self.color("critical")
+        case .pending: color = Self.color("warning")
         }
 
         let rect = NSRect(x: center.x - dotDiameter / 2, y: center.y - dotDiameter / 2,
@@ -183,16 +213,85 @@ final class StatusItemView: NSView {
         }
     }
 
+    // MARK: Redraw
+
+    /// Marks the view for redrawing only if what it shows has changed, down to
+    /// the pixel row each graph sample lands on. Returns whether it will redraw.
+    @discardableResult
+    func redrawIfChanged() -> Bool {
+        let signature = contentSignature
+        guard signature != drawnSignature else { return false }
+        drawnSignature = signature
+        needsDisplay = true
+        return true
+    }
+
+    /// Forgets what was drawn, so the next `redrawIfChanged` draws again.
+    func invalidateDrawing() {
+        drawnSignature = nil
+    }
+
+    private var contentSignature: String {
+        guard let store else { return "" }
+        var parts = lines
+        if let suffix { parts.append(suffix.text + suffix.color.description) }
+        switch module {
+        case .connectivity: parts.append("\(store.connectivity.status)")
+        case .battery:
+            parts.append("\(store.battery.powerState) \(Int(store.battery.percentage * 100))")
+        default: break
+        }
+        let height = Int(bounds.height - 6)
+        for entry in graphSeries {
+            let values = visibleSamples(entry.values)
+            let ceiling = graphCeiling(graphSeries)
+            parts.append(values.map { String(Int((min(max($0 / ceiling, 0), 1)) * Double(height))) }
+                            .joined(separator: ","))
+            parts.append(entry.color.description)
+        }
+        return parts.joined(separator: "|")
+    }
+
+    /// One sample per pixel column: older samples would be squeezed into
+    /// sub-pixel steps nobody can see, yet still force a redraw.
+    private func visibleSamples(_ values: [Double]) -> ArraySlice<Double> {
+        values.suffix(Int(graphWidth))
+    }
+
+    /// A shared ceiling keeps the two rate curves comparable to each other.
+    private func graphCeiling(_ series: [(values: [Double], color: NSColor)]) -> Double {
+        guard !graphIsNormalised else { return 1 }
+        let peak = series.flatMap { visibleSamples($0.values) }.max() ?? 1
+        return peak > 0 ? peak : 1
+    }
+
     // MARK: Layout
 
-    var preferredWidth: CGFloat {
-        let font = lines.count > 1 ? doubleLineFont : singleLineFont
-        var textWidth = lines
-            .map { ($0 as NSString).size(withAttributes: attributes(font)).width }
-            .max() ?? 0
-        if let suffix {
-            textWidth += (suffix.text as NSString).size(withAttributes: attributes(font)).width
+    /// The widest text each readout can show. Sizing to it keeps the item a
+    /// fixed width: a status item that changes length makes macOS lay out the
+    /// whole menu bar again in another process, and the icons jitter.
+    private var widestLines: [String] {
+        switch module {
+        case .cpu, .gpu, .memory, .battery: return ["100%"]
+        case .disk: return ["R 1023K", "W 1023K"]
+        case .network: return ["↓ 1023K", "↑ 1023K"]
+        case .connectivity: return []
         }
+    }
+
+    private var textWidth: CGFloat {
+        let font = lines.count > 1 ? doubleLineFont : singleLineFont
+        func widest(_ strings: [String]) -> CGFloat {
+            strings.map { ($0 as NSString).size(withAttributes: attributes(font)).width }.max() ?? 0
+        }
+        var width = max(widest(lines), widest(widestLines))
+        if suffix != nil {
+            width += (" 100°" as NSString).size(withAttributes: attributes(font)).width
+        }
+        return width
+    }
+
+    var preferredWidth: CGFloat {
 
         if drawsDot { return dotDiameter + 12 }
 
@@ -231,13 +330,18 @@ final class StatusItemView: NSView {
         guard !lines.isEmpty else { return }
 
         if lines.count == 1 {
+            // Right-aligned in the reserved width, so digits stay put as the
+            // value grows from "9%" to "10%".
             let attrs = attributes(singleLineFont)
             let size = (lines[0] as NSString).size(withAttributes: attrs)
+            let suffixAttrs = suffix.map { attributes(singleLineFont, $0.color) }
+            let suffixWidth = suffix.map { ($0.text as NSString).size(withAttributes: suffixAttrs!).width } ?? 0
+            let start = max(x, bounds.width - 4 - suffixWidth - size.width)
             let y = (bounds.height - size.height) / 2
-            (lines[0] as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
-            if let suffix {
-                (suffix.text as NSString).draw(at: NSPoint(x: x + size.width, y: y),
-                                               withAttributes: attributes(singleLineFont, suffix.color))
+            (lines[0] as NSString).draw(at: NSPoint(x: start, y: y), withAttributes: attrs)
+            if let suffix, let suffixAttrs {
+                (suffix.text as NSString).draw(at: NSPoint(x: start + size.width, y: y),
+                                               withAttributes: suffixAttrs)
             }
             return
         }
@@ -254,18 +358,13 @@ final class StatusItemView: NSView {
     }
 
     private func drawGraph(_ series: [(values: [Double], color: NSColor)], in rect: NSRect) {
-        // A shared ceiling keeps the two rate curves comparable to each other.
-        var ceiling = 1.0
-        if !graphIsNormalised {
-            ceiling = series.flatMap(\.values).max() ?? 1
-            if ceiling <= 0 { ceiling = 1 }
-        }
+        let ceiling = graphCeiling(series)
 
         NSColor.labelColor.withAlphaComponent(0.12).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
 
         for entry in series {
-            let values = entry.values
+            let values = Array(visibleSamples(entry.values))
             guard values.count > 1 else { continue }
 
             // Stretch the available samples across the box so it is never a

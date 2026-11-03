@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Sidebar sections. Kept out of `ContentView` because the selection lives in
 /// `MonitorStore`: the SwiftUI `@State` macro plugin is unavailable when only the
@@ -11,6 +12,7 @@ enum MonitorSection: String, CaseIterable, Identifiable {
     case battery = "Pin"
     case network = "Mạng"
     case processes = "Tiến trình"
+    case settings = "Cài đặt"
 
     var id: String { rawValue }
 
@@ -26,6 +28,7 @@ enum MonitorSection: String, CaseIterable, Identifiable {
         case .battery: return "battery.100"
         case .network: return "network"
         case .processes: return "list.bullet.rectangle"
+        case .settings: return "gearshape"
         }
     }
 }
@@ -33,6 +36,7 @@ enum MonitorSection: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var store: MonitorStore
     @EnvironmentObject private var settings: MenuBarSettings
+    @StateObject private var visibility = WindowVisibility()
 
     var body: some View {
         NavigationSplitView {
@@ -43,20 +47,7 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 170, ideal: 180, max: 220)
             .safeAreaInset(edge: .bottom) { refreshPicker }
         } detail: {
-            ScrollView {
-                Group {
-                    switch store.section ?? .overview {
-                    case .overview: OverviewView()
-                    case .cpu: CPUView()
-                    case .memory: MemoryView()
-                    case .disk: DiskView()
-                    case .battery: BatteryView()
-                    case .network: NetworkView()
-                    case .processes: ProcessesView()
-                    }
-                }
-                .padding(18)
-            }
+            detail
             .navigationTitle((store.section ?? .overview).title)
             .toolbar {
                 ToolbarItem(placement: .status) {
@@ -67,8 +58,38 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 600)
+        .background(WindowObserver { visibility.isVisible = $0 })
         // See SettingsView: re-render every string when the language changes.
         .id(settings.language)
+    }
+
+    /// While the window cannot be seen — covered, minimised, on another
+    /// Space — the tab is taken out of the view tree, so SwiftUI stops
+    /// re-rendering it every sample. That was most of the app's CPU time.
+    @ViewBuilder
+    private var detail: some View {
+        if !visibility.isVisible {
+            Color.clear
+        } else if store.section == .settings {
+            // Form scrolls on its own and collapses inside a ScrollView.
+            SettingsView(embedded: true)
+        } else {
+            ScrollView {
+                Group {
+                    switch store.section ?? .overview {
+                    case .overview: OverviewView()
+                    case .cpu: CPUView()
+                    case .memory: MemoryView()
+                    case .disk: DiskView()
+                    case .battery: BatteryView()
+                    case .network: NetworkView()
+                    case .processes: ProcessesView()
+                    case .settings: EmptyView()
+                    }
+                }
+                .padding(18)
+            }
+        }
     }
 
     private var refreshPicker: some View {
@@ -1066,6 +1087,60 @@ struct ProcessesView: View {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Whether the main window can currently be seen by the user.
+@MainActor
+final class WindowVisibility: ObservableObject {
+    @Published var isVisible = true
+}
+
+/// Reports the hosting window's visibility: occlusion covers being behind
+/// other windows, on another Space or on a sleeping display; miniaturising is
+/// checked separately because the Dock copy still counts as visible.
+struct WindowObserver: NSViewRepresentable {
+    let onChange: (Bool) -> Void
+
+    func makeNSView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.onChange = onChange
+        return view
+    }
+
+    func updateNSView(_ view: ObserverView, context: Context) {
+        view.onChange = onChange
+    }
+
+    final class ObserverView: NSView {
+        var onChange: ((Bool) -> Void)?
+        private var tokens: [NSObjectProtocol] = []
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            tokens.forEach(NotificationCenter.default.removeObserver)
+            tokens = []
+            guard let window else { return }
+            let names: [Notification.Name] = [NSWindow.didChangeOcclusionStateNotification,
+                                              NSWindow.didMiniaturizeNotification,
+                                              NSWindow.didDeminiaturizeNotification]
+            tokens = names.map {
+                NotificationCenter.default.addObserver(forName: $0, object: window, queue: .main) {
+                    [weak self] _ in self?.report()
+                }
+            }
+            report()
+        }
+
+        private func report() {
+            guard let window else { return }
+            let visible = window.occlusionState.contains(.visible) && !window.isMiniaturized
+            onChange?(visible)
+        }
+
+        deinit {
+            tokens.forEach(NotificationCenter.default.removeObserver)
         }
     }
 }

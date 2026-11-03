@@ -622,11 +622,10 @@ struct MenuBarPopover: View {
     /// Since macOS 14 SwiftUI ignores `showSettingsWindow:` sent from outside a
     /// `SettingsLink`, and this view lives in an AppKit popover where that link
     /// has no scene to open. The app menu's "Settings…" item still works.
+    /// Settings live in the main window as their own tab.
     private func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        if !Self.performMenuItem(keyEquivalent: ",") {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        }
+        store.section = .settings
+        openMainWindow()
     }
 
     /// Fires the first ⌘-<key> item found anywhere in the main menu.

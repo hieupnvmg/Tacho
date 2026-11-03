@@ -92,13 +92,21 @@ final class StatusBarController: NSObject {
 
     /// Redraws every readout and resizes the ones whose text grew or shrank.
     private func refresh() {
-        for (module, view) in views {
-            let width = view.preferredWidth
-            if abs((items[module]?.length ?? 0) - width) > 0.5 {
-                items[module]?.length = width
-            }
-            view.needsDisplay = true
+        for module in views.keys { render(module) }
+    }
+
+    /// Redraws one item, but only when what it shows has changed. The view
+    /// stays a live subview rather than a pre-drawn image: macOS redraws it
+    /// separately for each display's menu bar, which can differ between light
+    /// and dark, so an image would show the wrong colours on one of them.
+    private func render(_ module: MenuBarModule) {
+        guard let view = views[module], let item = items[module] else { return }
+        let width = view.preferredWidth
+        if abs(item.length - width) > 0.5 {
+            item.length = width
+            view.invalidateDrawing()
         }
+        view.redrawIfChanged()
     }
 
     /// Tooltips are set once per item, and an open popover would keep the

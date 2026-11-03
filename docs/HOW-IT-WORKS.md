@@ -118,7 +118,7 @@ Tất cả đọc trực tiếp từ API hệ thống, không phụ thuộc thư
 - **Pin**: IORegistry `AppleSmartBattery`. Số mAh nằm trong dict con `BatteryData`
   (`DesignCapacity`, `NominalChargeCapacity`, `RemainingCapacity`), còn `CurrentCapacity`
   ở cấp ngoài đã là phần trăm trên Apple silicon. Riêng **dung lượng tối đa và tình trạng**
-  lấy từ `system_profiler -json SPPowerDataType` (cache 60s) vì macOS không tính con số đó
+  lấy từ `system_profiler -json SPPowerDataType` (cache 30 phút, vì lệnh này tốn khoảng 1 giây) vì macOS không tính con số đó
   theo tỉ lệ mAh — tự tính sẽ ra lệch (76.6% thay vì 80%) và sai cả kết luận tình trạng.
   **Công suất** lấy từ dict `PowerTelemetryData` (mW, do bộ điều khiển nguồn đo): `SystemLoad` là
   máy đang dùng, `BatteryPower` là phần đang sạc vào pin, `SystemPowerIn` là tổng kéo từ cục sạc.
@@ -183,6 +183,31 @@ rồi chạy
 TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-check
 TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-install --no-relaunch
 ```
+
+## Hiệu năng
+
+Đo bằng thời gian CPU của tiến trình trong 30 giây, trên MacBook Pro M1 Pro, lấy mẫu 1 giây/lần:
+
+| Trạng thái | CPU |
+|---|---|
+| Chỉ có menu bar (cửa sổ đóng hoặc bị che) | ~3% |
+| Cửa sổ chính đang hiện | ~4–5% |
+
+Những điều đã học được khi tối ưu — đừng đảo ngược:
+
+- **Mục menu bar chỉ vẽ lại khi nội dung nhìn thấy được thay đổi** (`StatusItemView.redrawIfChanged`).
+  macOS chụp lại mỗi mục cho từng menu bar (mỗi màn hình, mỗi Space) mỗi lần nó vẽ lại, tốn hơn
+  chính việc vẽ.
+- **Không override `viewDidChangeEffectiveAppearance` trong `StatusItemView`.** Các lần chụp đó đổi
+  appearance của view theo từng màn hình; hook này từng làm mọi mục vẽ lại ~11 lần/giây.
+- **Mục menu bar có độ rộng cố định** theo giá trị dài nhất. Đổi `length` bắt macOS sắp xếp lại cả
+  menu bar trong một tiến trình khác.
+- **Không dùng `button.image` cho mục menu bar.** Ảnh vẽ sẵn chỉ đúng một kiểu sáng/tối, trong khi menu
+  bar mỗi màn hình có thể khác nhau; còn theo dõi `effectiveAppearance` của nút thì thành vòng lặp.
+- **Cửa sổ chính gỡ nội dung tab ra khi không nhìn thấy** (`WindowObserver`: bị che, thu nhỏ, ở Space
+  khác), nên SwiftUI không tính lại giao diện mỗi giây.
+- **Không animation** trên các vòng tròn cập nhật mỗi giây (xem `CoreRing`).
+- Nhiệt độ và quạt đọc mỗi 3 chu kỳ: mỗi key SMC là một lần gọi xuống kernel.
 
 ## Ghi chú
 

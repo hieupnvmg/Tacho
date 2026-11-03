@@ -109,7 +109,10 @@ final class MonitorStore: ObservableObject {
         // Spawning ps is the most expensive part of a sample, and only the
         // Processes tab shows the result.
         let wantsProcesses = section == .processes && (tick % 3 == 1 || processes.isEmpty)
-        let wantsVolumes = tick % 10 == 1
+        let wantsVolumes = tick % 30 == 1
+        // Die temperature and fan speed drift over seconds; each of the ~35
+        // SMC keys is a kernel round trip, so they are read every third tick.
+        let wantsThermal = tick % 3 == 1
         // Drive hardware never changes unless something is plugged in, and the
         // battery gauge only moves slowly.
         let wantsDrives = tick % 30 == 1
@@ -120,8 +123,8 @@ final class MonitorStore: ObservableObject {
             let cpu = collector.cpu()
             let memory = collector.memory()
             let gpu = collector.gpu()
-            let fans = collector.fans()
-            let temperature = collector.temperature()
+            let fans = wantsThermal ? collector.fans() : nil
+            let temperature = wantsThermal ? collector.temperature() : nil
             let disk = collector.diskIO()
             let network = collector.network()
             let processes = wantsProcesses ? collector.topProcesses() : nil
@@ -135,8 +138,8 @@ final class MonitorStore: ObservableObject {
                 self.cpu = cpu
                 self.memory = memory
                 self.gpu = gpu
-                self.fans = fans
-                self.temperature = temperature
+                if let fans { self.fans = fans }
+                if let temperature { self.temperature = temperature }
                 self.disk = disk
                 self.network = network
                 self.info.uptime = uptime
@@ -149,14 +152,14 @@ final class MonitorStore: ObservableObject {
                 Self.append(&self.memoryHistory, memory.usedFraction)
                 Self.append(&self.pressureHistory, memory.pressure)
                 Self.append(&self.gpuHistory, gpu.utilization)
-                if self.fanHistory.count != fans.count {
-                    self.fanHistory = Array(repeating: [], count: fans.count)
+                if self.fanHistory.count != self.fans.count {
+                    self.fanHistory = Array(repeating: [], count: self.fans.count)
                 }
-                for fan in fans {
+                for fan in self.fans {
                     Self.append(&self.fanHistory[fan.id], fan.fraction)
                 }
-                if temperature.isPresent {
-                    Self.append(&self.temperatureHistory, temperature.cpuAverage)
+                if self.temperature.isPresent {
+                    Self.append(&self.temperatureHistory, self.temperature.cpuAverage)
                 }
                 Self.append(&self.swapHistory, memory.swapInRate + memory.swapOutRate)
                 Self.append(&self.diskReadHistory, disk.readRate)

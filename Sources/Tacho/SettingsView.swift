@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct SettingsView: View {
+    /// Shown as a tab of the main window rather than in its own window.
+    var embedded = false
+
     @EnvironmentObject private var settings: MenuBarSettings
     @EnvironmentObject private var store: MonitorStore
     @EnvironmentObject private var updater: Updater
@@ -47,7 +50,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 400, height: 560)
+        .frame(width: embedded ? nil : 400, height: embedded ? nil : 560)
+        .frame(maxWidth: embedded ? 640 : nil, maxHeight: .infinity, alignment: .top)
         // Strings are looked up while rendering, so a new identity re-renders
         // every one of them in the new language.
         .id(settings.language)
