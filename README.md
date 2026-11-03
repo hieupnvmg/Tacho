@@ -70,7 +70,7 @@ Giao diện sáng và tối theo macOS.
 ## Và còn nữa
 
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
-- **Nhẹ** — app nhỏ chưa tới 1 MB, không chạy animation thừa
+- **Nhẹ** — bản tải về chưa tới 3 MB, không chạy animation thừa
 - **Riêng tư** — mọi số liệu đọc ngay trên máy; chỉ gọi mạng để kiểm tra Internet và bản cập nhật,
   tắt được cả hai
 - **Tùy chọn** — chọn mục nào hiện trên menu bar, bật/tắt đồ thị, ẩn icon khỏi Dock, đổi tần suất cập nhật
