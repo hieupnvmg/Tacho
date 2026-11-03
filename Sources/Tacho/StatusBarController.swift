@@ -8,6 +8,7 @@ final class StatusBarController: NSObject {
 
     private let store: MonitorStore
     private let settings: MenuBarSettings
+    private let updater: Updater
 
     private var items: [MenuBarModule: NSStatusItem] = [:]
     private var views: [MenuBarModule: StatusItemView] = [:]
@@ -19,9 +20,10 @@ final class StatusBarController: NSObject {
     private var lastClosed: (module: MenuBarModule, time: Date)?
     private var cancellables: Set<AnyCancellable> = []
 
-    init(store: MonitorStore, settings: MenuBarSettings) {
+    init(store: MonitorStore, settings: MenuBarSettings, updater: Updater) {
         self.store = store
         self.settings = settings
+        self.updater = updater
         super.init()
 
         popover.behavior = .transient
@@ -135,7 +137,8 @@ final class StatusBarController: NSObject {
         popover.contentViewController = NSHostingController(
             rootView: MenuBarPopover(module: module)
                 .environmentObject(store)
-                .environmentObject(settings))
+                .environmentObject(settings)
+                .environmentObject(updater))
         // Without activating first, a transient popover from an inactive app can
         // be dismissed by the very click that opened it.
         NSApp.activate(ignoringOtherApps: true)

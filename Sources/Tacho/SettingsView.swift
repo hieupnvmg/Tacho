@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settings: MenuBarSettings
     @EnvironmentObject private var store: MonitorStore
+    @EnvironmentObject private var updater: Updater
 
     var body: some View {
         Form {
@@ -28,7 +29,7 @@ struct SettingsView: View {
                 Toggle(L("Vẽ đồ thị trong mục menu bar"), isOn: $settings.showGraphs)
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Kiểm tra kết nối Internet"), isOn: $settings.checkConnectivity)
-                    Text(L("Gọi 1.1.1.1 của Cloudflare mỗi 60 giây. Đây là lần gọi mạng duy nhất của app; tắt đi thì app không liên lạc ra ngoài máy."))
+                    Text(L("Gọi 1.1.1.1 của Cloudflare mỗi 60 giây để biết có Internet và lấy IP ra Internet."))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -40,9 +41,13 @@ struct SettingsView: View {
                     Text(L("5 giây")).tag(5.0)
                 }
             }
+
+            Section(L("Cập nhật")) {
+                UpdateSection()
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 450)
+        .frame(width: 400, height: 560)
         // Strings are looked up while rendering, so a new identity re-renders
         // every one of them in the new language.
         .id(settings.language)
@@ -51,5 +56,102 @@ struct SettingsView: View {
     private func binding(for module: MenuBarModule) -> Binding<Bool> {
         Binding(get: { settings.isEnabled(module) },
                 set: { settings.setEnabled(module, $0) })
+    }
+}
+
+/// Version, the automatic-check switch, and whatever the updater is doing.
+struct UpdateSection: View {
+    @EnvironmentObject private var updater: Updater
+
+    private static let clock: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private var isBusy: Bool {
+        switch updater.state {
+        case .checking, .downloading, .installing: return true
+        default: return false
+        }
+    }
+
+    var body: some View {
+        HStack {
+            Text(L("Phiên bản %@", updater.currentVersion))
+            Spacer()
+            Button(L("Kiểm tra ngay")) { Task { await updater.check() } }
+                .disabled(isBusy)
+        }
+
+        VStack(alignment: .leading, spacing: 2) {
+            Toggle(L("Tự kiểm tra bản cập nhật"), isOn: $updater.automaticChecks)
+            Text(L("Hỏi GitHub mỗi ngày một lần xem có bản mới không. Tắt mục này và mục kiểm tra Internet thì app không liên lạc ra ngoài máy."))
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+        }
+
+        status
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        switch updater.state {
+        case .idle:
+            if let checked = updater.lastChecked {
+                Text(L("kiểm tra lúc %@", Self.clock.string(from: checked)))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+        case .checking:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L("Đang kiểm tra…")).foregroundStyle(.secondary)
+            }
+        case .upToDate:
+            Label(L("Đang dùng bản mới nhất"), systemImage: "checkmark.circle.fill")
+                .foregroundStyle(Palette.memory)
+        case .available(let release):
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(L("Có bản mới %@", release.version), systemImage: "arrow.down.circle.fill")
+                        .foregroundStyle(Palette.cpu)
+                        .font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    Button(updater.canInstallInPlace ? L("Cập nhật ngay") : L("Tải về")) {
+                        Task { await updater.install() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                if !release.notes.isEmpty {
+                    Text(release.notes)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(6)
+                }
+                Link(L("Xem trên GitHub"), destination: release.page)
+                    .font(.system(size: 11))
+            }
+        case .downloading(let progress):
+            VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: progress)
+                Text(L("Đang tải… %.0f%%", progress * 100))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+        case .installing:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(L("Đang cài đặt… app sẽ tự mở lại")).foregroundStyle(.secondary)
+            }
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 6) {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Palette.critical)
+                    .font(.system(size: 11))
+                if updater.latest != nil {
+                    Button(L("Thử lại")) { Task { await updater.install() } }
+                }
+            }
+        }
     }
 }

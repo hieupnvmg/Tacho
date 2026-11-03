@@ -7,6 +7,7 @@ struct MenuBarPopover: View {
 
     @EnvironmentObject private var store: MonitorStore
     @EnvironmentObject private var settings: MenuBarSettings
+    @EnvironmentObject private var updater: Updater
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -17,6 +18,8 @@ struct MenuBarPopover: View {
             }
 
             detail
+
+            updateBanner
 
             Divider()
             HStack(spacing: 10) {
@@ -31,6 +34,43 @@ struct MenuBarPopover: View {
         }
         .padding(14)
         .frame(width: 290)
+    }
+
+    /// Only shown while there is something to say about an update.
+    @ViewBuilder
+    private var updateBanner: some View {
+        switch updater.state {
+        case .available(let release):
+            Button {
+                Task { await updater.install() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.circle.fill")
+                    Text(L("Có bản mới %@", release.version))
+                        .font(.system(size: 11, weight: .semibold))
+                    Spacer()
+                    Text(updater.canInstallInPlace ? L("Cập nhật ngay") : L("Tải về"))
+                        .font(.system(size: 11))
+                }
+                .foregroundStyle(Palette.cpu)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Palette.cpu.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        case .downloading(let progress):
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("Đang tải… %.0f%%", progress * 100))
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                ProgressView(value: progress)
+            }
+        case .installing:
+            Text(L("Đang cài đặt… app sẽ tự mở lại"))
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+        default:
+            EmptyView()
+        }
     }
 
     @ViewBuilder

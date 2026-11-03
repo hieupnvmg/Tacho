@@ -29,5 +29,9 @@ hdiutil create \
     -ov \
     "$DMG_PATH" >/dev/null
 
+# The updater refuses a release without this, and checks the download against it.
+(cd "$(dirname "$DMG_PATH")" && shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_PATH").sha256")
+
 echo "==> Done: $DMG_PATH"
+echo "           $DMG_PATH.sha256"
 echo "    Kéo \"${APP_NAME}\" vào Applications để cài."

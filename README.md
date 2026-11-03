@@ -133,14 +133,49 @@ Tất cả đọc trực tiếp từ API hệ thống, không phụ thuộc thư
 
 ## App có gọi ra Internet
 
-Đây là **chỗ duy nhất** app liên lạc ra ngoài máy. Mục "Kết nối" gọi
-`https://1.1.1.1/cdn-cgi/trace` của Cloudflare, 60 giây một lần và mỗi khi đường mạng
-thay đổi, để biết thật sự có ra được Internet hay không (route tồn tại chưa chắc đã
-ra được — captive portal, uplink chết). Phản hồi của endpoint đó cũng chính là nguồn
-IP ra Internet: không có cách nào biết IP công khai mà không hỏi một bên ngoài mạng.
+App chỉ liên lạc ra ngoài máy ở **hai chỗ**, cả hai đều tắt được trong Cài đặt (`⌘,`):
 
-Không muốn thì tắt mục **Kết nối** trong Cài đặt (`⌘,`) — khi tắt, app không gửi gì ra ngoài.
-Mọi chỉ số còn lại đều đọc từ kernel trên máy.
+1. **Kiểm tra kết nối** — mục "Kết nối" gọi `https://1.1.1.1/cdn-cgi/trace` của Cloudflare,
+   60 giây một lần và mỗi khi đường mạng thay đổi, để biết thật sự có ra được Internet hay không
+   (route tồn tại chưa chắc đã ra được — captive portal, uplink chết). Phản hồi của endpoint đó
+   cũng chính là nguồn IP ra Internet: không có cách nào biết IP công khai mà không hỏi một bên
+   ngoài mạng.
+2. **Kiểm tra bản cập nhật** — hỏi `api.github.com` mỗi ngày một lần (xem phần dưới).
+
+Tắt cả hai thì app không gửi gì ra ngoài. Mọi chỉ số còn lại đều đọc từ kernel trên máy.
+
+## Cập nhật tự động (OTA)
+
+App tự hỏi GitHub Releases của [`hieupnvmg/Tacho`](https://github.com/hieupnvmg/Tacho/releases)
+lúc mở và sau đó mỗi ngày một lần. Có bản mới thì hiện dải **"Có bản mới…"** ở cuối mọi popover và
+trong **Cài đặt → Cập nhật**; bấm **Cập nhật ngay** là app:
+
+1. tải file `.dmg` và file `.dmg.sha256` của bản phát hành,
+2. so mã SHA-256 — lệch là dừng,
+3. mount `.dmg`, kiểm tra app bên trong đúng bundle id, đúng số phiên bản và chữ ký hợp lệ,
+4. thoát; một script nhỏ chờ app tắt hẳn, thay bản cũ bằng bản mới (lỗi thì khôi phục bản cũ)
+   rồi mở lại app.
+
+App phải nằm ở thư mục ghi được (vd `/Applications` với tài khoản admin). Nếu đang chạy thẳng từ
+`.dmg` thì nút đổi thành **Tải về** và mở trang release trên GitHub.
+
+### Phát hành bản mới
+
+```bash
+./release.sh 1.1.0 "Mô tả thay đổi"
+```
+
+Script ghi `VERSION`, build `.dmg` + `.dmg.sha256`, commit, gắn tag `v1.1.0`, push, rồi tạo release
+trên GitHub kèm hai file đó (cần GitHub CLI `gh`; không có thì script in link để tạo tay — nhớ đính
+kèm **cả hai** file, thiếu `.sha256` app sẽ từ chối cập nhật).
+
+Thử toàn bộ luồng mà không cần phát hành: tạo một file JSON giống API GitHub trỏ tới `.dmg` trên máy,
+rồi chạy
+
+```bash
+TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-check
+TACHO_UPDATE_FEED=file:///đường/dẫn/feed.json ./dist/Tacho.app/Contents/MacOS/Tacho --update-install --no-relaunch
+```
 
 ## Ghi chú
 

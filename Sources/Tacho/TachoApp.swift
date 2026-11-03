@@ -7,6 +7,7 @@ import AppKit
 enum AppEnvironment {
     static let store = MonitorStore()
     static let settings = MenuBarSettings()
+    static let updater = Updater()
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -22,7 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppEnvironment.settings.applyActivationPolicy()
         NSApp.activate(ignoringOtherApps: true)
         statusBar = StatusBarController(store: AppEnvironment.store,
-                                        settings: AppEnvironment.settings)
+                                        settings: AppEnvironment.settings,
+                                        updater: AppEnvironment.updater)
+        AppEnvironment.updater.startAutomaticChecks()
     }
 
     /// The menu bar readouts keep running after the window is closed.
@@ -36,12 +39,18 @@ struct TachoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = AppEnvironment.store
     @StateObject private var settings = AppEnvironment.settings
+    @StateObject private var updater = AppEnvironment.updater
 
     init() {
         SettingsMigration.run()
-        if CommandLine.arguments.contains("--dump") {
+        let arguments = CommandLine.arguments
+        if arguments.contains("--dump") {
             DiagnosticDump.run()
             exit(0)
+        }
+        if arguments.contains("--update-check") || arguments.contains("--update-install") {
+            UpdateCommand.run(install: arguments.contains("--update-install"),
+                              relaunch: !arguments.contains("--no-relaunch"))
         }
     }
 
@@ -57,6 +66,7 @@ struct TachoApp: App {
             SettingsView()
                 .environmentObject(store)
                 .environmentObject(settings)
+                .environmentObject(updater)
         }
     }
 }

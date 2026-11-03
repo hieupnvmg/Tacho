@@ -22,6 +22,10 @@ enum SnapshotRenderer {
         }
 
         store.setConnectivityEnabled(settings.checkConnectivity)
+        // With a test feed, show the update banner as it would appear.
+        if ProcessInfo.processInfo.environment["TACHO_UPDATE_FEED"] != nil {
+            Task { await AppEnvironment.updater.check() }
+        }
 
         // Let the collectors fill in a few samples so the graphs are not empty.
         RunLoop.main.run(until: Date().addingTimeInterval(4))
@@ -45,7 +49,8 @@ enum SnapshotRenderer {
         for module in MenuBarModule.allCases {
             render(MenuBarPopover(module: module)
                     .environmentObject(store)
-                    .environmentObject(settings),
+                    .environmentObject(settings)
+                    .environmentObject(AppEnvironment.updater),
                    width: 290, scheme: .dark, to: folder, name: "popover-\(module.rawValue)")
         }
 
