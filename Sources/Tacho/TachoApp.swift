@@ -1,0 +1,80 @@
+import SwiftUI
+import AppKit
+
+/// Shared instances, because `NSApplicationDelegateAdaptor` builds the delegate
+/// itself and cannot be handed the objects the scenes use.
+@MainActor
+enum AppEnvironment {
+    static let store = MonitorStore()
+    static let settings = MenuBarSettings()
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusBar: StatusBarController?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let arguments = CommandLine.arguments
+        if let index = arguments.firstIndex(of: "--snapshot"), index + 1 < arguments.count {
+            SnapshotRenderer.run(directory: arguments[index + 1])
+            exit(0)
+        }
+
+        AppEnvironment.settings.applyActivationPolicy()
+        NSApp.activate(ignoringOtherApps: true)
+        statusBar = StatusBarController(store: AppEnvironment.store,
+                                        settings: AppEnvironment.settings)
+    }
+
+    /// The menu bar readouts keep running after the window is closed.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+}
+
+@main
+struct TachoApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var store = AppEnvironment.store
+    @StateObject private var settings = AppEnvironment.settings
+
+    init() {
+        SettingsMigration.run()
+        if CommandLine.arguments.contains("--dump") {
+            DiagnosticDump.run()
+            exit(0)
+        }
+    }
+
+    var body: some Scene {
+        WindowGroup("Tacho") {
+            ContentView()
+                .environmentObject(store)
+                .environmentObject(settings)
+        }
+        .windowToolbarStyle(.unified(showsTitle: true))
+
+        Settings {
+            SettingsView()
+                .environmentObject(store)
+                .environmentObject(settings)
+        }
+    }
+}
+
+/// Carries settings over from the app's previous name ("Resource Monitor",
+/// bundle `local.macresourcemonitor`), once, before anything reads them.
+enum SettingsMigration {
+    private static let oldDomain = "local.macresourcemonitor"
+    private static let doneKey = "migration.fromResourceMonitor"
+
+    static func run() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: doneKey) else { return }
+        defer { defaults.set(true, forKey: doneKey) }
+        guard let old = UserDefaults.standard.persistentDomain(forName: oldDomain) else { return }
+        for (key, value) in old where defaults.object(forKey: key) == nil
+            && !key.hasPrefix("NS") {
+            defaults.set(value, forKey: key)
+        }
+    }
+}
