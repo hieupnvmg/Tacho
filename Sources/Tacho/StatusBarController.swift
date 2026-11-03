@@ -185,8 +185,8 @@ final class StatusBarController: NSObject {
         var anchor = sender.bounds
         let module: MenuBarModule
         if let view = compactView, compactItem?.button === sender {
-            let point = sender.convert(NSApp.currentEvent?.locationInWindow ?? .zero, from: nil)
-            guard let hit = view.module(atX: point.x),
+            let x = Self.pointerX(in: sender)
+            guard let hit = view.module(atX: x),
                   let column = view.columns.first(where: { $0.module == hit }) else { return }
             module = hit
             anchor = NSRect(x: column.frame.minX, y: 0, width: column.frame.width, height: sender.bounds.height)
@@ -225,6 +225,31 @@ final class StatusBarController: NSObject {
         openModule = module
         store.popoverModule = module
         popover.contentViewController?.view.window?.makeKey()
+    }
+}
+
+extension StatusBarController {
+    /// Where across the item the pointer is. The click event itself cannot be
+    /// trusted for this: macOS draws status items in every display's menu bar
+    /// and forwards clicks to the real one as if they landed in its middle.
+    /// The pointer's screen position is real, and so is the item's place on
+    /// the display under it, since the menu bar is the same on each display.
+    static func pointerX(in button: NSStatusBarButton) -> CGFloat {
+        let mouse = NSEvent.mouseLocation
+        let eventX = button.convert(NSApp.currentEvent?.locationInWindow ?? .zero, from: nil).x
+        guard let window = button.window else { return eventX }
+        let buttonInWindow = button.convert(button.bounds, to: nil)
+        // The item's left edge measured from its own screen's right edge holds
+        // on every display's menu bar; status items are laid out from the right.
+        let fromRight = (window.screen?.frame.maxX ?? 0) - (window.frame.minX + buttonInWindow.minX)
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+        var x = eventX
+        if let screen {
+            let left = screen.frame.maxX - fromRight
+            let candidate = mouse.x - left
+            if candidate >= 0 && candidate <= button.bounds.width { x = candidate }
+        }
+        return x
     }
 }
 
