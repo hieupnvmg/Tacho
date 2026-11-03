@@ -27,8 +27,11 @@ fi
 echo "$VERSION" > VERSION
 ./build-dmg.sh
 
-git add VERSION
-git commit -m "Release ${TAG}"
+# Releasing the version already in VERSION (the first release) has nothing to commit.
+if ! git diff --quiet -- VERSION; then
+    git add VERSION
+    git commit -m "Release ${TAG}"
+fi
 git tag -a "$TAG" -m "Tacho ${VERSION}"
 git push origin HEAD "$TAG"
 
