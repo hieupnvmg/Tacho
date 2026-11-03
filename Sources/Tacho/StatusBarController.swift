@@ -51,6 +51,7 @@ final class StatusBarController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] show in
                 self?.views.values.forEach { $0.showGraph = show }
+                self?.compactView?.showGraph = show
                 self?.refresh()
             }
             .store(in: &cancellables)
@@ -82,6 +83,7 @@ final class StatusBarController: NSObject {
             if compactItem == nil {
                 let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
                 let view = CompactStatusView(store: store)
+                view.showGraph = settings.showGraphs
                 if let button = item.button {
                     view.frame = button.bounds
                     view.autoresizingMask = [.width, .height]

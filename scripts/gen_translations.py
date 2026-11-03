@@ -280,7 +280,7 @@ T = {
 "Gộp thành một mục gọn": ("Combine into one compact item", "Объединить в один компактный элемент"),
 "Hộp": ("Case", "Футляр"),
 "Lịch sử": ("History", "История"),
-"Mọi chỉ số nằm chung một mục, hai dòng chữ, không đồ thị. Hợp với MacBook có tai thỏ. Bấm vào cột nào thì mở bảng của cột đó.": ("Every readout in one item, two lines of text, no graphs. Good for MacBooks with a notch. Click a column to open its panel.", "Все показатели в одном элементе, в две строки, без графиков. Удобно на MacBook с вырезом. Нажмите на столбец, чтобы открыть его панель."),
+"Mọi chỉ số nằm chung một mục, mỗi chỉ số một cột hai dòng, đồ thị mờ phía sau. Hợp với MacBook có tai thỏ. Bấm vào cột nào thì mở bảng của cột đó.": ("Every readout in one item, a two-line column each with a faint graph behind it. Good for MacBooks with a notch. Click a column to open its panel.", "Все показатели в одном элементе: по столбцу в две строки с бледным графиком позади. Удобно на MacBook с вырезом. Нажмите на столбец, чтобы открыть его панель."),
 "PIN": ("BAT", "АКБ"),
 "Phải": ("R", "П"),
 "Pin chuột, bàn phím, tai nghe yếu": ("Mouse, keyboard or headphone battery low", "Низкий заряд мыши, клавиатуры, наушников"),

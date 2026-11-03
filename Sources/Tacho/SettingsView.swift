@@ -49,12 +49,11 @@ struct SettingsView: View {
             Section(L("Hiển thị")) {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Gộp thành một mục gọn"), isOn: $settings.compact)
-                    Text(L("Mọi chỉ số nằm chung một mục, hai dòng chữ, không đồ thị. Hợp với MacBook có tai thỏ. Bấm vào cột nào thì mở bảng của cột đó."))
+                    Text(L("Mọi chỉ số nằm chung một mục, mỗi chỉ số một cột hai dòng, đồ thị mờ phía sau. Hợp với MacBook có tai thỏ. Bấm vào cột nào thì mở bảng của cột đó."))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
                 Toggle(L("Vẽ đồ thị trong mục menu bar"), isOn: $settings.showGraphs)
-                    .disabled(settings.compact)
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Kiểm tra kết nối Internet"), isOn: $settings.checkConnectivity)
                     Text(L("Gọi 1.1.1.1 của Cloudflare mỗi 60 giây để biết có Internet và lấy IP ra Internet."))
