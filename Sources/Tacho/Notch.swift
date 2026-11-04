@@ -581,6 +581,16 @@ private struct OutputRow: View {
 
 // MARK: - Controller
 
+/// AppKit keeps windows clear of the menu bar on some Macs (seen on a
+/// MacBook Air M2), which left a strip of wallpaper above the shape. The
+/// panel belongs exactly at the top edge, so it opts out.
+final class NotchPanel: NSPanel {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+
 /// Owns the panel over the notch: watches for events worth showing in its
 /// wings, and for the pointer resting on it.
 @MainActor
@@ -594,6 +604,7 @@ final class NotchController {
     /// Keeps the demo's panel open wherever the pointer is.
     private var demoPinned = false
     private var panel: NSPanel?
+    private var panelFrame: CGRect?
     private var geometry: NotchGeometry?
     private var eventsOn = false
     private var peekOn = false
@@ -663,7 +674,7 @@ final class NotchController {
         let canvas = model.canvas
         let frame = CGRect(x: geometry.rect.midX - canvas.width / 2, y: geometry.screenFrame.maxY - canvas.height,
                            width: canvas.width, height: canvas.height)
-        let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
+        let panel = NotchPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: true)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -682,6 +693,7 @@ final class NotchController {
         panel.contentView = host
         panel.setFrame(frame, display: false)
         self.panel = panel
+        panelFrame = frame
     }
 
     // MARK: Showing
@@ -701,6 +713,9 @@ final class NotchController {
         if fromHidden {
             model.mode = .idle
             panel.orderFrontRegardless()
+            // Placed again after ordering in, in case the system moved it
+            // while it was off screen.
+            if let panelFrame, panel.frame != panelFrame { panel.setFrame(panelFrame, display: false) }
         }
         panel.ignoresMouseEvents = mode != .peek
         // From hidden, give the idle shape one frame on screen so the spring
