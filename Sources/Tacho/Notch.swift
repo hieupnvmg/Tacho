@@ -14,7 +14,9 @@ struct NotchGeometry: Equatable {
             guard let left = screen.auxiliaryTopLeftArea,
                   let right = screen.auxiliaryTopRightArea else { continue }
             let frame = screen.frame
-            let height = screen.safeAreaInsets.top
+            // The Air reports 33.5pt. A half-point height leaves the window 0.5pt
+            // short of a whole point, and the gap shows as a grey line on top.
+            let height = screen.safeAreaInsets.top.rounded(.up)
             let minX = frame.minX + left.width
             let width = frame.width - left.width - right.width
             return NotchGeometry(screenFrame: frame,
@@ -226,6 +228,7 @@ struct NotchView: View {
                 .clipped()
         }
         .frame(width: model.canvas.width, height: model.canvas.height, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .opacity(model.mode == .hidden ? 0 : 1)
         // The panel sits in the notch, which SwiftUI may count as unsafe
         // area and push the shape down from; it must start at the very top.
