@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         updater: AppEnvironment.updater)
         notch = NotchController(store: AppEnvironment.store, settings: AppEnvironment.settings)
         if arguments.contains("--notch-demo") { notch?.runDemo() }
+        if arguments.contains("--notch-info") { notch?.printInfo() }
         AppEnvironment.updater.startAutomaticChecks()
         AppEnvironment.alerts.start(store: AppEnvironment.store)
         AppEnvironment.history.start(store: AppEnvironment.store)

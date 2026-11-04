@@ -227,6 +227,9 @@ struct NotchView: View {
         }
         .frame(width: model.canvas.width, height: model.canvas.height, alignment: .top)
         .opacity(model.mode == .hidden ? 0 : 1)
+        // The panel sits in the notch, which SwiftUI may count as unsafe
+        // area and push the shape down from; it must start at the very top.
+        .ignoresSafeArea()
         .environment(\.colorScheme, .dark)
     }
 
@@ -690,6 +693,7 @@ final class NotchController {
             MenuBarPopover.openMainWindow()
         })
         host.frame = CGRect(origin: .zero, size: canvas)
+        if #available(macOS 13.3, *) { host.safeAreaRegions = [] }
         panel.contentView = host
         panel.setFrame(frame, display: false)
         self.panel = panel
@@ -870,6 +874,37 @@ final class NotchController {
 
     /// `--notch-demo`: plays each state once, for checking the animation and
     /// recording it, without waiting for a charger or a pointer.
+    /// `--notch-info`: opens the panel, prints where it really ended up next
+    /// to what the screen reports, and quits. For Macs where it does not sit
+    /// flush with the top edge.
+    func printInfo() {
+        configure(events: true, peek: peekOn)
+        demoPinned = true
+        openPeek()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
+            var lines = ["macOS \(ProcessInfo.processInfo.operatingSystemVersionString)"]
+            var size = 0
+            sysctlbyname("hw.model", nil, &size, nil, 0)
+            var model = [CChar](repeating: 0, count: size)
+            sysctlbyname("hw.model", &model, &size, nil, 0)
+            lines.append("model \(String(cString: model))")
+            for screen in NSScreen.screens {
+                lines.append("screen \(screen.localizedName) frame \(screen.frame) visible \(screen.visibleFrame) "
+                             + "scale \(screen.backingScaleFactor) safeTop \(screen.safeAreaInsets.top) "
+                             + "left \(screen.auxiliaryTopLeftArea ?? .zero) right \(screen.auxiliaryTopRightArea ?? .zero)")
+            }
+            lines.append("menu bar \(NSApp.mainMenu?.menuBarHeight ?? -1) status bar \(NSStatusBar.system.thickness)")
+            lines.append("notch \(geometry?.rect ?? .zero)")
+            lines.append("panel wanted \(panelFrame ?? .zero) actual \(panel?.frame ?? .zero) "
+                         + "level \(panel?.level.rawValue ?? 0) onscreen \(panel?.isVisible ?? false)")
+            if let host = panel?.contentView {
+                lines.append("host frame \(host.frame) safe area \(host.safeAreaInsets)")
+            }
+            print(lines.joined(separator: "\n"))
+            exit(0)
+        }
+    }
+
     func runDemo() {
         configure(events: true, peek: peekOn)
         let steps: [(TimeInterval, () -> Void)] = [

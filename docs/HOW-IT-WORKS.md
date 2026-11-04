@@ -282,6 +282,8 @@ Cách làm:
 - Theo dõi con trỏ bằng `NSEvent` global monitor cho `mouseMoved`, không cần quyền Accessibility (chỉ
   phím bấm mới cần).
 - Chạy thử mọi trạng thái: `open dist/Tacho.app --args --notch-demo`.
+- Bảng không sát mép trên trên máy nào đó: `Tacho.app/Contents/MacOS/Tacho --notch-info` mở bảng, in
+  kích thước màn hình, vùng tai thỏ, vị trí bảng muốn đặt và vị trí thật, rồi thoát.
 
 ## Hiệu năng
 
