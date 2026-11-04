@@ -21,8 +21,11 @@ final class StatusItemView: NSView {
     /// AppKit already redraws a view whose appearance really changes.
     private var drawnSignature: String?
 
-    private let graphWidth: CGFloat = 26
-    private let spacing: CGFloat = 4
+    private let graphWidth: CGFloat = 20
+    private let spacing: CGFloat = 3
+    /// Space either side of the content. Every point counts: with a few
+    /// readouts on a notched MacBook, macOS hides whatever does not fit.
+    private let inset: CGFloat = 3
 
     init(module: MenuBarModule, store: MonitorStore) {
         self.module = module
@@ -76,7 +79,11 @@ final class StatusItemView: NSView {
         guard let store else { return [] }
         switch module {
         case .cpu:
-            return [String(format: "%.0f%%", store.cpu.busy * 100)]
+            // The temperature goes underneath rather than beside: on one line
+            // the item was nearly twice as wide.
+            let busy = String(format: "%.0f%%", store.cpu.busy * 100)
+            guard store.temperature.isPresent else { return [busy] }
+            return [busy, String(format: "%.0f°", store.temperature.cpuAverage)]
         case .gpu:
             return [String(format: "%.0f%%", store.gpu.utilization * 100)]
         case .memory:
@@ -94,19 +101,16 @@ final class StatusItemView: NSView {
         }
     }
 
-    /// Drawn after a single-line value in its own colour: the CPU temperature.
-    /// It stays the menu bar's text colour while cool and only turns amber or
-    /// red when warm, so colour in the menu bar always means something.
-    private var suffix: (text: String, color: NSColor)? {
+    /// The CPU temperature's colour. It stays secondary while cool and only
+    /// turns amber or red when warm, so colour in the menu bar always means
+    /// something.
+    private var temperatureColor: NSColor? {
         guard module == .cpu, let store, store.temperature.isPresent else { return nil }
-        let celsius = store.temperature.cpuAverage
-        let color: NSColor
-        switch celsius {
-        case ..<70: color = .secondaryLabelColor
-        case ..<90: color = Self.color("warning")
-        default: color = Self.color("critical")
+        switch store.temperature.cpuAverage {
+        case ..<70: return .secondaryLabelColor
+        case ..<90: return Self.color("warning")
+        default: return Self.color("critical")
         }
-        return (String(format: " %.0f°", celsius), color)
     }
 
     /// History series drawn behind the text, newest on the right.
@@ -164,7 +168,7 @@ final class StatusItemView: NSView {
         ring.stroke()
     }
 
-    private let batterySize = NSSize(width: 24, height: 11)
+    private let batterySize = NSSize(width: 21, height: 10)
 
     /// A battery drawn by hand: an SF Symbol cannot show the actual charge
     /// level, only one of five fixed steps.
@@ -234,7 +238,7 @@ final class StatusItemView: NSView {
     private var contentSignature: String {
         guard let store else { return "" }
         var parts = lines
-        if let suffix { parts.append(suffix.text + suffix.color.description) }
+        if let temperatureColor { parts.append(temperatureColor.description) }
         switch module {
         case .connectivity: parts.append("\(store.connectivity.status)")
         case .battery:
@@ -272,7 +276,8 @@ final class StatusItemView: NSView {
     /// whole menu bar again in another process, and the icons jitter.
     private var widestLines: [String] {
         switch module {
-        case .cpu, .gpu, .memory, .battery: return ["100%"]
+        case .cpu: return ["100%", "100°"]
+        case .gpu, .memory, .battery: return ["100%"]
         case .disk: return ["R 1023K", "W 1023K"]
         case .network: return ["↓ 1023K", "↑ 1023K"]
         case .connectivity: return []
@@ -284,21 +289,17 @@ final class StatusItemView: NSView {
         func widest(_ strings: [String]) -> CGFloat {
             strings.map { ($0 as NSString).size(withAttributes: attributes(font)).width }.max() ?? 0
         }
-        var width = max(widest(lines), widest(widestLines))
-        if suffix != nil {
-            width += (" 100°" as NSString).size(withAttributes: attributes(font)).width
-        }
-        return width
+        return max(widest(lines), widest(widestLines))
     }
 
     var preferredWidth: CGFloat {
 
-        if drawsDot { return dotDiameter + 12 }
+        if drawsDot { return dotDiameter + 10 }
 
         var width = ceil(textWidth)
         if !graphSeries.isEmpty { width += graphWidth + spacing }
         if drawsBattery { width += batterySize.width + 3 + spacing }
-        return max(width + 8, 24)
+        return max(width + inset * 2, 20)
     }
 
     // MARK: Drawing
@@ -309,7 +310,7 @@ final class StatusItemView: NSView {
             return
         }
 
-        var x: CGFloat = 4
+        var x = inset
 
         if drawsBattery {
             drawBattery(at: NSPoint(x: x, y: (bounds.height - batterySize.height) / 2))
@@ -334,15 +335,9 @@ final class StatusItemView: NSView {
             // value grows from "9%" to "10%".
             let attrs = attributes(singleLineFont)
             let size = (lines[0] as NSString).size(withAttributes: attrs)
-            let suffixAttrs = suffix.map { attributes(singleLineFont, $0.color) }
-            let suffixWidth = suffix.map { ($0.text as NSString).size(withAttributes: suffixAttrs!).width } ?? 0
-            let start = max(x, bounds.width - 4 - suffixWidth - size.width)
-            let y = (bounds.height - size.height) / 2
-            (lines[0] as NSString).draw(at: NSPoint(x: start, y: y), withAttributes: attrs)
-            if let suffix, let suffixAttrs {
-                (suffix.text as NSString).draw(at: NSPoint(x: start + size.width, y: y),
-                                               withAttributes: suffixAttrs)
-            }
+            let start = max(x, bounds.width - inset - size.width)
+            (lines[0] as NSString).draw(at: NSPoint(x: start, y: (bounds.height - size.height) / 2),
+                                        withAttributes: attrs)
             return
         }
 
@@ -351,8 +346,17 @@ final class StatusItemView: NSView {
         let lineHeight = (lines[0] as NSString).size(withAttributes: attrs).height
         let total = lineHeight * CGFloat(lines.count)
         var y = (bounds.height - total) / 2
-        for line in lines {
-            (line as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+        for (index, line) in lines.enumerated() {
+            if module == .cpu {
+                // Percent over temperature, both right-aligned so the digits
+                // stay put.
+                let lineAttrs = index == 1 ? attributes(doubleLineFont, temperatureColor ?? .labelColor) : attrs
+                let width = (line as NSString).size(withAttributes: lineAttrs).width
+                (line as NSString).draw(at: NSPoint(x: max(x, bounds.width - inset - width), y: y),
+                                        withAttributes: lineAttrs)
+            } else {
+                (line as NSString).draw(at: NSPoint(x: x, y: y), withAttributes: attrs)
+            }
             y += lineHeight
         }
     }
