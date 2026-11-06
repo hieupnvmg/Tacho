@@ -45,8 +45,11 @@ final class StatusItemView: NSView {
 
     // Built once: creating a system font and converting a SwiftUI colour are
     // both slow enough to show up when six items redraw every second.
-    private static let singleLine = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-    private static let doubleLine = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private static let singleLine = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+    private static let doubleLine = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+    /// The temperature under the CPU percentage: bolder, so it reads at a
+    /// glance even in colour.
+    private static let temperatureFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .bold)
     private static let colors: [String: NSColor] = [
         "cpu": NSColor(Palette.cpu), "gpu": NSColor(Palette.gpu),
         "read": NSColor(Palette.read), "write": NSColor(Palette.write),
@@ -108,8 +111,8 @@ final class StatusItemView: NSView {
         guard module == .cpu, let store, store.temperature.isPresent else { return nil }
         switch store.temperature.cpuAverage {
         case ..<70: return .secondaryLabelColor
-        case ..<90: return Self.color("warning")
-        default: return Self.color("critical")
+        case ..<90: return MenuBarText.warning
+        default: return MenuBarText.critical
         }
     }
 
@@ -168,7 +171,7 @@ final class StatusItemView: NSView {
         ring.stroke()
     }
 
-    private let batterySize = NSSize(width: 21, height: 10)
+    private let batterySize = NSSize(width: 25, height: 12)
 
     /// A battery drawn by hand: an SF Symbol cannot show the actual charge
     /// level, only one of five fixed steps.
@@ -209,7 +212,7 @@ final class StatusItemView: NSView {
         if let name = overlay,
            let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil) {
             symbol.isTemplate = true
-            let side: CGFloat = 8
+            let side: CGFloat = 10
             let rect = NSRect(x: body.midX - side / 2, y: body.midY - side / 2,
                               width: side, height: side)
             NSColor.labelColor.set()
@@ -343,14 +346,16 @@ final class StatusItemView: NSView {
 
         // Two stacked rows, mirroring how iStat shows up/down rates.
         let attrs = attributes(doubleLineFont, .labelColor)
-        let lineHeight = (lines[0] as NSString).size(withAttributes: attrs).height
+        // A little tighter than the font's own leading, so two rows of the
+        // larger size still fit the menu bar's 22 points.
+        let lineHeight = (lines[0] as NSString).size(withAttributes: attrs).height - 1.5
         let total = lineHeight * CGFloat(lines.count)
         var y = (bounds.height - total) / 2
         for (index, line) in lines.enumerated() {
             if module == .cpu {
                 // Percent over temperature, both right-aligned so the digits
                 // stay put.
-                let lineAttrs = index == 1 ? attributes(doubleLineFont, temperatureColor ?? .labelColor) : attrs
+                let lineAttrs = index == 1 ? attributes(Self.temperatureFont, temperatureColor ?? .labelColor) : attrs
                 let width = (line as NSString).size(withAttributes: lineAttrs).width
                 (line as NSString).draw(at: NSPoint(x: max(x, bounds.width - inset - width), y: y),
                                         withAttributes: lineAttrs)

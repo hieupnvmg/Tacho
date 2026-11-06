@@ -571,3 +571,19 @@ final class CopyFeedback: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
     }
 }
+
+/// Warning colours for text in the menu bar. The palette's amber and red are
+/// light enough to vanish on a light menu bar at nine or ten points, so a
+/// light menu bar gets deeper tones; a dark one keeps the palette's.
+enum MenuBarText {
+    static let warning = adaptive(light: NSColor(red: 0.80, green: 0.38, blue: 0.0, alpha: 1),
+                                  dark: NSColor(Palette.warning))
+    static let critical = adaptive(light: NSColor(red: 0.82, green: 0.13, blue: 0.13, alpha: 1),
+                                   dark: NSColor(Palette.critical))
+
+    private static func adaptive(light: NSColor, dark: NSColor) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
+        }
+    }
+}

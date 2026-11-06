@@ -19,13 +19,13 @@ final class CompactStatusView: NSView {
     private(set) var columns: [(module: MenuBarModule, frame: NSRect)] = []
     private var drawnSignature: String?
 
-    private static let labelFont = NSFont.systemFont(ofSize: 8, weight: .semibold)
-    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
-    private static let rateFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .medium)
+    private static let labelFont = NSFont.systemFont(ofSize: 9, weight: .semibold)
+    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    private static let rateFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
     // Converted once: turning a SwiftUI colour into an NSColor is slow enough
     // to matter when it happens every second.
-    private static let warning = NSColor(Palette.warning)
-    private static let critical = NSColor(Palette.critical)
+    private static let warning = MenuBarText.warning
+    private static let critical = MenuBarText.critical
     private static let good = NSColor(Palette.memory)
     private static let cpu = NSColor(Palette.cpu)
     private static let gpu = NSColor(Palette.gpu)
@@ -39,7 +39,7 @@ final class CompactStatusView: NSView {
     /// Room between a column's edge and its text, so the graph shows around it.
     private let padding: CGFloat = 4
     private let dotDiameter: CGFloat = 7
-    private let batterySize = NSSize(width: 17, height: 8)
+    private let batterySize = NSSize(width: 21, height: 10)
 
     init(store: MonitorStore) {
         self.store = store
@@ -274,7 +274,7 @@ final class CompactStatusView: NSView {
     private func drawBattery(rightEdge: CGFloat) {
         guard let store else { return }
         let battery = store.battery
-        let body = NSRect(x: rightEdge - batterySize.width - 1.5, y: bounds.midY - batterySize.height - 1.5,
+        let body = NSRect(x: rightEdge - batterySize.width - 1.5, y: bounds.midY - batterySize.height - 0.5,
                           width: batterySize.width, height: batterySize.height)
 
         let outline = NSBezierPath(roundedRect: body.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2)
@@ -297,7 +297,7 @@ final class CompactStatusView: NSView {
         if battery.powerState == .charging,
            let bolt = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil) {
             bolt.isTemplate = true
-            let side: CGFloat = 7
+            let side: CGFloat = 9
             NSColor.labelColor.set()
             bolt.draw(in: NSRect(x: body.minX - side - 1, y: body.midY - side / 2, width: side, height: side))
         }
