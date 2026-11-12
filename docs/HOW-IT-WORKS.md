@@ -235,7 +235,7 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
 
 ## Tai thỏ (notch)
 
-`Notch.swift`, bật trong Cài đặt › Tai thỏ, mặc định tắt cả hai:
+`Notch.swift` và `NotchExtras.swift`, bật trong Cài đặt › Tai thỏ, mặc định tắt hết:
 
 - **Báo sự kiện:** cắm hoặc rút sạc, một thiết bị Bluetooth vừa kết nối, mất mạng hoặc có mạng lại,
   cuộc gọi bắt đầu (tên app) hoặc kết thúc (thời lượng). Tai thỏ giãn ngang thành hai "cánh", biểu
@@ -244,10 +244,24 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
   - Bluetooth: `PeripheralWatcher` nghe danh sách thiết bị âm thanh của CoreAudio (AirPods, tai nghe)
     và thông báo IOKit cho `AppleDeviceManagementHIDEventService` (chuột, bàn phím), rồi đọc pin sau
     2 và 7 giây vì AirPods báo pin hơi trễ.
+  - Pin yếu: báo khi pin xuống 20% và 10% lúc không cắm sạc, mỗi mức một lần cho tới khi cắm lại.
+  - **Tài nguyên** (`ResourceWatch`): một app dùng trên 150% CPU, CPU trên 95°C, hoặc áp lực bộ nhớ ở
+    mức đỏ, kéo dài nửa phút. Hết cảnh báo khi app xuống dưới 80% hay CPU dưới 85°C, để số đo quanh
+    ngưỡng không chập chờn. Danh sách app chỉ lấy (bằng `ps`) mỗi 5 lần lấy mẫu và chỉ khi CPU bận trên
+    25%.
+  - **Cuộc họp** (`MeetingWatcher`, công tắc riêng, xin quyền Lịch khi bật): đọc lịch của macOS qua
+    EventKit mỗi phút và khi lịch đổi. Báo trước 5 phút và lúc bắt đầu. Họp Teams có trong đó khi tài
+    khoản Microsoft 365 đã thêm trong Tài khoản Internet; link vào họp (Teams, Zoom, Meet, Webex) lấy
+    từ URL, địa điểm hoặc ghi chú, link Teams mở bằng `msteams://` cho thẳng vào app.
+  - **Chia sẻ màn hình** (`ScreenSharing`): không có API, nên dựa vào việc Teams, Zoom, Webex vẽ một
+    khung viền to bằng cả màn hình, nổi trên cửa sổ thường, trong lúc chia sẻ. Chỉ kiểm tra khi đang
+    có cuộc gọi. Trong lúc đó tai thỏ giữ quầng đỏ và hai chấm đỏ nhấp nháy. `--notch-info` in các
+    cửa sổ của những app này để chỉnh lại nếu một app làm khác.
 - **Rê chuột để mở bảng:** để con trỏ trên tai thỏ khoảng 0,2 giây. Rời ra ngoài thì tự đóng.
   - **Cuộc gọi** (`CallDetector`): app nào đang giữ micro, đọc từ danh sách tiến trình của CoreAudio
     (`kAudioHardwarePropertyProcessObjectList`, `kAudioProcessPropertyIsRunningInput`, cần macOS
-    14.2). Tiến trình phụ như `com.microsoft.teams2.helper` được quy về app chính. Bỏ qua tiến trình
+    14.2). Tiến trình phụ như `com.microsoft.teams2.modulehost` được quy về app có biểu tượng trên Dock
+    chứa nó; nút Mở mở app đó qua Launch Services, nên cửa sổ đang thu nhỏ cũng hiện lại. Bỏ qua tiến trình
     `com.apple.*` (Siri, đọc chính tả) trừ FaceTime. Micro rảnh 8 giây liên tục mới coi là hết cuộc
     gọi, vì tắt tiếng có thể nhả micro một lúc. Tên cuộc họp lấy từ tiêu đề cửa sổ, chỉ đọc được khi
     Tacho có quyền Ghi màn hình; không có thì ghi "Đang trong cuộc gọi". Kiểm tra mỗi 2 giây khi bật
@@ -262,10 +276,27 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
     y như bấm phím trên bàn phím, nên tới đúng app đang phát. `MRMediaRemoteSendCommand` không dùng
     được: gọi từ app ngoài Apple thì bị bỏ qua, gọi qua osascript thì lúc ăn lúc không (YouTube dừng
     được nhưng không phát lại). Phím giả lập cần quyền Trợ năng; bấm nút lần đầu thì macOS hỏi, và bảng
-    hiện dòng nhắc cho tới khi có quyền. Bản build ký ad-hoc nên mỗi bản mới có thể phải cấp lại.
+    hiện dòng nhắc cho tới khi có quyền. Bản phát hành ký ad-hoc nên mỗi bản mới có thể phải cấp lại; bản build trên máy có chứng chỉ "Tacho
+    Signing" thì giữ được quyền.
   - **Phát ra:** danh sách thiết bị CoreAudio có đầu ra, bỏ thiết bị ảo (driver của Teams, Zoom) và
     thiết bị gộp. Bấm là đổi thiết bị mặc định (`kAudioHardwarePropertyDefaultOutputDevice`).
-  - Bài hát và danh sách loa chỉ được đọc mỗi giây trong lúc bảng đang mở.
+  - Bài hát và danh sách loa chỉ được đọc mỗi giây trong lúc bảng đang mở. Tên loa tự rút gọn chứ
+    không cuộn ngang, vì vuốt ngang để chuyển trang.
+  - **Micro và camera:** nút tắt micro dùng công tắc mute của thiết bị vào mặc định
+    (`kAudioDevicePropertyMute`), thiết bị không có thì hạ âm lượng vào về 0 rồi trả lại; tắt cho mọi
+    app cùng lúc. Camera đang bật hay không đọc từ CoreMediaIO
+    (`kCMIODevicePropertyDeviceIsRunningSomewhere`); hệ thống không nói app nào dùng.
+  - **Đầy sau:** khi đang sạc, thời gian tới lúc đầy (`TimeRemaining` của pin).
+  - **Giữ máy thức** (`KeepAwake`): `IOPMAssertion` kiểu `PreventUserIdleDisplaySleep`, như
+    `caffeinate -d`; bấm để bật tới khi tắt, chuột phải để chọn 1 hoặc 2 giờ.
+  - **Kệ file** (`NotchShelf`): chỉ giữ đường dẫn, file vẫn ở chỗ cũ, tối đa 12. Kéo file khác app
+    không gửi sự kiện chuột cho app khác, nên một cửa sổ đen nhỏ nằm đúng chỗ camera (không nhìn thấy)
+    đón việc kéo thả và mở bảng; cửa sổ đó cũng nhận việc rê chuột vào tai thỏ.
+  - **Trang clipboard** (`ClipboardHistory`, công tắc riêng): vuốt hai ngón ngang trên bảng để sang.
+    Đọc `changeCount` mỗi 0,75 giây, chỉ đọc nội dung khi nó đổi; giữ 20 mục trong bộ nhớ, bỏ qua mục
+    có kiểu `org.nspasteboard.ConcealedType` / `TransientType` của trình quản lý mật khẩu. Tìm kiếm
+    không phân biệt hoa thường và dấu. Chỉ ở trang này bảng mới nhận bàn phím (như Spotlight, không
+    đưa Tacho lên trước).
 
 Cách làm:
 

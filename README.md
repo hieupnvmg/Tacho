@@ -76,7 +76,7 @@ Giao diện sáng và tối theo macOS.
 - **Pin chuột, bàn phím, AirPods** — ngay trong bảng Pin, có cảnh báo khi sắp hết
 - **Lịch sử 24 giờ** — xem lại CPU, nhiệt độ, bộ nhớ, mạng, pin trong 1 giờ hoặc cả ngày qua
 - **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
-- **Tai thỏ biết nói** — cắm sạc, kết nối AirPods, mất mạng, vào cuộc gọi Teams thì tai thỏ giãn ra báo; rê chuột vào tai thỏ để điều khiển nhạc (YouTube, Spotify, Nhạc…), chọn loa hoặc tai nghe, xem cuộc gọi đang diễn ra
+- **Tai thỏ biết nói** — cắm sạc, pin yếu, kết nối AirPods, mất mạng, vào cuộc gọi Teams, app ngốn CPU, sắp tới giờ họp thì tai thỏ giãn ra báo; đang chia sẻ màn hình thì viền đỏ. Rê chuột vào tai thỏ để điều khiển nhạc, chọn loa hoặc tai nghe, tắt micro trong cuộc gọi, vào họp bằng một nút, giữ máy thức, thả file tạm lên kệ, và vuốt sang trang lịch sử clipboard có tìm kiếm
 - **Hình chạy theo CPU** — mèo, chó, cà phê, động cơ… chạy trên menu bar, CPU càng bận càng chạy nhanh. Hình từ [RunCat Neo](https://github.com/runcat-dev/RunCatNeo) (Apache 2.0)
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
 - **Nhẹ** — bản tải về khoảng 3 MB, không chạy animation thừa
