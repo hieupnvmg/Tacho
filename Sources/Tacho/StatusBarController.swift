@@ -55,9 +55,9 @@ final class StatusBarController: NSObject {
             .sink { [weak self] on in self?.setCat(on) }
             .store(in: &cancellables)
 
-        settings.$runner
+        settings.$runnerID
             .receive(on: RunLoop.main)
-            .sink { [weak self] runner in self?.cat?.show(runner) }
+            .sink { [weak self] id in self?.cat?.show(RunnerLibrary.shared.runner(id: id)) }
             .store(in: &cancellables)
 
         settings.$showGraphs
@@ -152,11 +152,12 @@ final class StatusBarController: NSObject {
 
     private func setCat(_ on: Bool) {
         if on, catItem == nil {
-            let item = NSStatusBar.system.statusItem(withLength: settings.runner.width)
+            let runner = RunnerLibrary.shared.runner(id: settings.runnerID)
+            let item = NSStatusBar.system.statusItem(withLength: runner.width)
             guard let button = item.button else { return }
             button.target = self
             button.action = #selector(statusItemClicked(_:))
-            let animator = RunnerAnimator(store: store, item: item, runner: settings.runner)
+            let animator = RunnerAnimator(store: store, item: item, runner: runner)
             catItem = item
             cat = animator
             refresh()

@@ -25,6 +25,7 @@ struct MenuBarPopover: View {
             HStack(spacing: 10) {
                 Button(L("Cửa sổ chính")) { Self.openMainWindow() }
                 Button(L("Cài đặt")) { openSettings() }
+                activityMonitorButton
                 Spacer()
                 Button(L("Thoát")) { NSApp.terminate(nil) }
             }
@@ -34,6 +35,25 @@ struct MenuBarPopover: View {
         }
         .padding(14)
         .frame(width: 290)
+    }
+
+    /// Opens Activity Monitor, for when the panel shows something worth a
+    /// closer look. A small copy of the app's own icon, beside the other
+    /// footer links.
+    @ViewBuilder
+    private var activityMonitorButton: some View {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor") {
+            Button {
+                NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+            } label: {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                    .resizable()
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L("Mở Activity Monitor"))
+        }
     }
 
     /// Only shown while there is something to say about an update.

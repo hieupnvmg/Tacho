@@ -1,47 +1,130 @@
 import AppKit
 
-/// An animation that runs in the menu bar, faster the busier the CPU is.
-/// The frames come from RunCat Neo, under the Apache License 2.0; see
-/// Assets/Runners/NOTICE.
-enum Runner: String, CaseIterable, Identifiable {
-    case cat, dog, coffee, drop, engine, mochi, cradle, slime
+/// An animation that runs in the menu bar, faster the busier the CPU is:
+/// one of the built-in ones, whose frames come from RunCat Neo under the
+/// Apache License 2.0 (see Assets/Runners/NOTICE), or one the user imported.
+struct Runner: Identifiable, Hashable {
+    let id: String
+    let title: String
+    /// Monochrome runners are tinted the menu bar's text colour; colour ones
+    /// keep their own colours.
+    let isTemplate: Bool
+    let folder: URL
+    let isCustom: Bool
 
-    var id: String { rawValue }
+    static let defaultID = "cat"
 
-    var title: String {
-        switch self {
-        case .cat: return L("Mèo")
-        case .dog: return L("Chó")
-        case .coffee: return L("Cà phê")
-        case .drop: return L("Giọt nước")
-        case .engine: return L("Động cơ")
-        case .mochi: return L("Giã bánh mochi")
-        case .cradle: return L("Con lắc Newton")
-        case .slime: return L("Slime")
-        }
-    }
+    static let builtIn: [Runner] = {
+        let root = Bundle.main.resourceURL?.appendingPathComponent("Runners") ?? URL(fileURLWithPath: "/")
+        let names: [(String, String)] = [
+            ("cat", L("Mèo")), ("dog", L("Chó")), ("coffee", L("Cà phê")), ("drop", L("Giọt nước")),
+            ("engine", L("Động cơ")), ("mochi", L("Giã bánh mochi")), ("cradle", L("Con lắc Newton")),
+            ("slime", L("Slime")),
+        ]
+        return names.map { Runner(id: $0.0, title: $0.1, isTemplate: true,
+                                  folder: root.appendingPathComponent($0.0), isCustom: false) }
+    }()
 
-    private static var cache: [Runner: [NSImage]] = [:]
+    private static var cache: [String: [NSImage]] = [:]
 
-    /// The frames in order, as template images so each display's menu bar
-    /// tints them its own colour. Drawn at 2x, so a 36-pixel frame is 18
-    /// points tall. Empty when run outside the app bundle.
+    /// The frames in order, frame-0.png, frame-1.png and so on. Drawn at 2x,
+    /// so a 36-pixel frame is 18 points tall.
     var frames: [NSImage] {
-        if let cached = Self.cache[self] { return cached }
-        guard let folder = Bundle.main.resourceURL?.appendingPathComponent("Runners/\(rawValue)") else { return [] }
+        if let cached = Self.cache[id] { return cached }
         var frames: [NSImage] = []
         while let image = NSImage(contentsOf: folder.appendingPathComponent("frame-\(frames.count).png")) {
             if let rep = image.representations.first {
                 image.size = NSSize(width: CGFloat(rep.pixelsWide) / 2, height: CGFloat(rep.pixelsHigh) / 2)
             }
-            image.isTemplate = true
+            image.isTemplate = isTemplate
             frames.append(image)
         }
-        Self.cache[self] = frames
+        Self.cache[id] = frames
         return frames
     }
 
     var width: CGFloat { (frames.first?.size.width ?? 28) + 6 }
+}
+
+/// The built-in runners and the ones the user imported. Imported runners
+/// live in Application Support, a folder each with their frames and an
+/// info.json, in the same frame format RunCat Neo takes, so runners from its
+/// Runner Gallery import as they are.
+@MainActor
+final class RunnerLibrary: ObservableObject {
+    static let shared = RunnerLibrary()
+
+    @Published private(set) var custom: [Runner] = []
+
+    var all: [Runner] { Runner.builtIn + custom }
+
+    /// RunCat Neo's limits, so a runner that works there works here.
+    static let frameHeight = 36
+    static let frameWidths = 10...100
+    static let maxFrames = 30
+
+    private struct Info: Codable {
+        var name: String
+        var isTemplate: Bool
+        var added: Date
+    }
+
+    private let root: URL = {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return support.appendingPathComponent("Tacho/Runners", isDirectory: true)
+    }()
+
+    private init() { reload() }
+
+    func runner(id: String) -> Runner {
+        all.first { $0.id == id } ?? Runner.builtIn[0]
+    }
+
+    func reload() {
+        let folders = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        custom = folders.compactMap { folder -> (Runner, Date)? in
+            guard let data = try? Data(contentsOf: folder.appendingPathComponent("info.json")),
+                  let info = try? JSONDecoder().decode(Info.self, from: data) else { return nil }
+            let runner = Runner(id: "custom-" + folder.lastPathComponent, title: info.name,
+                                isTemplate: info.isTemplate, folder: folder, isCustom: true)
+            return (runner, info.added)
+        }
+        .sorted { $0.1 < $1.1 }
+        .map(\.0)
+    }
+
+    func nameIsTaken(_ name: String) -> Bool {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        return all.contains { $0.title.caseInsensitiveCompare(name) == .orderedSame }
+    }
+
+    /// Saves the frames as a new runner and returns it.
+    func add(name: String, isTemplate: Bool, frames: [CGImage]) throws -> Runner {
+        let folder = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        do {
+            for (index, frame) in frames.enumerated() {
+                guard let png = NSBitmapImageRep(cgImage: frame).representation(using: .png, properties: [:]) else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                try png.write(to: folder.appendingPathComponent("frame-\(index).png"))
+            }
+            let info = Info(name: name.trimmingCharacters(in: .whitespaces), isTemplate: isTemplate, added: Date())
+            try JSONEncoder().encode(info).write(to: folder.appendingPathComponent("info.json"))
+        } catch {
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+        reload()
+        return runner(id: "custom-" + folder.lastPathComponent)
+    }
+
+    /// Moves an imported runner to the Trash.
+    func delete(_ runner: Runner) {
+        guard runner.isCustom else { return }
+        try? FileManager.default.trashItem(at: runner.folder, resultingItemURL: nil)
+        reload()
+    }
 }
 
 /// Runs a runner in a status item's button, with the pace set by how busy
@@ -94,7 +177,7 @@ final class RunnerAnimator {
         layoutLayers()
         // The button may only take its new width on the next pass.
         DispatchQueue.main.async { [weak self] in self?.layoutLayers() }
-        runnerLayer.setFrames(frames)
+        runnerLayer.setFrames(frames, isTemplate: runner.isTemplate)
         updateSpeed()
     }
 
@@ -131,10 +214,17 @@ final class RunnerAnimator {
     }
 }
 
-/// Plays the frames as a mask over a block of the menu bar's text colour,
-/// which is how a template image is tinted.
+/// Plays the frames. A monochrome runner plays as a mask over a block of the
+/// menu bar's text colour, which is how a template image is tinted; a colour
+/// one plays in a sublayer of its own. Either way the animation and its
+/// timing live on a child layer: retiming this layer itself, in the button's
+/// layer tree, froze the animation.
 final class RunnerLayer: CALayer {
     private let maskLayer = CALayer()
+    private let colorLayer = CALayer()
+    /// The layer the animation runs on.
+    private var animated: CALayer { mask == nil ? colorLayer : maskLayer }
+    private var tint: CGColor?
     private let animation = CAKeyframeAnimation(keyPath: "contents")
 
     override init() {
@@ -143,7 +233,9 @@ final class RunnerLayer: CALayer {
         contentsScale = 2
         maskLayer.contentsGravity = .resize
         maskLayer.contentsScale = 2
-        mask = maskLayer
+        colorLayer.contentsGravity = .resize
+        colorLayer.contentsScale = 2
+        addSublayer(colorLayer)
         animation.calculationMode = .discrete
         animation.repeatCount = .infinity
         animation.isRemovedOnCompletion = false
@@ -155,35 +247,44 @@ final class RunnerLayer: CALayer {
     func place(in frame: CGRect) {
         self.frame = frame
         maskLayer.frame = CGRect(origin: .zero, size: frame.size)
+        colorLayer.frame = CGRect(origin: .zero, size: frame.size)
     }
 
-    func setFrames(_ frames: [NSImage]) {
+    func setFrames(_ frames: [NSImage], isTemplate: Bool) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        let speed = animated.speed
         maskLayer.removeAllAnimations()
+        colorLayer.removeAllAnimations()
+        mask = isTemplate ? maskLayer : nil
+        backgroundColor = isTemplate ? tint : nil
+        colorLayer.isHidden = isTemplate
+        animated.speed = speed
         // At speed 1, two frames a second.
         animation.values = frames
         animation.duration = Double(frames.count) / 2
-        maskLayer.add(animation, forKey: "running")
+        animated.add(animation, forKey: "running")
         CATransaction.commit()
     }
 
     func setColor(_ color: CGColor) {
+        tint = color
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        backgroundColor = color
+        if mask != nil { backgroundColor = color }
         CATransaction.commit()
     }
 
     /// Changes pace without a jump: the animation carries on from the frame
     /// it is on.
     func setSpeed(_ speed: Float) {
-        guard maskLayer.speed != speed else { return }
+        let layer = animated
+        guard layer.speed != speed else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        maskLayer.timeOffset = maskLayer.convertTime(CACurrentMediaTime(), from: nil)
-        maskLayer.beginTime = CACurrentMediaTime()
-        maskLayer.speed = speed
+        layer.timeOffset = layer.convertTime(CACurrentMediaTime(), from: nil)
+        layer.beginTime = CACurrentMediaTime()
+        layer.speed = speed
         CATransaction.commit()
     }
 }

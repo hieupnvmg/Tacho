@@ -9,6 +9,8 @@ struct SettingsView: View {
     @EnvironmentObject private var updater: Updater
     @EnvironmentObject private var alerts: AlertMonitor
     @StateObject private var loginItem = LoginItem()
+    @StateObject private var runnerImport = RunnerImportModel()
+    @ObservedObject private var runners = RunnerLibrary.shared
 
     var body: some View {
         Form {
@@ -61,8 +63,8 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 if settings.runningCat {
-                    Picker(L("Hình chạy"), selection: $settings.runner) {
-                        ForEach(Runner.allCases) { runner in
+                    Picker(L("Hình chạy"), selection: $settings.runnerID) {
+                        ForEach(runners.all) { runner in
                             // Each option shows its runner, as a still frame.
                             Label {
                                 Text(runner.title)
@@ -71,9 +73,30 @@ struct SettingsView: View {
                                     Image(nsImage: frame)
                                 }
                             }
-                            .tag(runner)
+                            .tag(runner.id)
                         }
                     }
+                    ForEach(runners.custom) { runner in
+                        HStack(spacing: 8) {
+                            if let frame = runner.frames.first {
+                                Image(nsImage: frame)
+                            }
+                            Text(runner.title)
+                            Spacer()
+                            Button {
+                                if settings.runnerID == runner.id { settings.runnerID = Runner.defaultID }
+                                runners.delete(runner)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(L("Xoá hình chạy này"))
+                        }
+                    }
+                    Button(L("Thêm hình chạy…")) { runnerImport.begin() }
+                        .sheet(isPresented: $runnerImport.showing) {
+                            RunnerImportView(model: runnerImport) { id in settings.runnerID = id }
+                        }
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Kiểm tra kết nối Internet"), isOn: $settings.checkConnectivity)

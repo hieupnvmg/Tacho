@@ -57,8 +57,8 @@ final class MenuBarSettings: ObservableObject {
     @Published var compact: Bool { didSet { persist() } }
     /// A runner in the menu bar that goes faster as the CPU gets busier.
     @Published var runningCat: Bool { didSet { persist() } }
-    /// Which runner that is.
-    @Published var runner: Runner { didSet { persist() } }
+    /// Which runner that is: a built-in one's name or an imported one's id.
+    @Published var runnerID: String { didSet { persist() } }
     /// Short events (charger, accessories, connection) grow out of the notch.
     @Published var notchEvents: Bool { didSet { persist() } }
     /// Resting the pointer on the notch opens a small dashboard there.
@@ -113,7 +113,7 @@ final class MenuBarSettings: ObservableObject {
         showGraphs = defaults.object(forKey: Self.graphsKey) as? Bool ?? true
         compact = defaults.bool(forKey: Self.compactKey)
         runningCat = defaults.bool(forKey: Self.catKey)
-        runner = defaults.string(forKey: Self.runnerKey).flatMap(Runner.init(rawValue:)) ?? .cat
+        runnerID = defaults.string(forKey: Self.runnerKey) ?? Runner.defaultID
         notchEvents = defaults.bool(forKey: Self.notchEventsKey)
         notchPeek = defaults.bool(forKey: Self.notchPeekKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
@@ -151,7 +151,7 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(showGraphs, forKey: Self.graphsKey)
         defaults.set(compact, forKey: Self.compactKey)
         defaults.set(runningCat, forKey: Self.catKey)
-        defaults.set(runner.rawValue, forKey: Self.runnerKey)
+        defaults.set(runnerID, forKey: Self.runnerKey)
         defaults.set(notchEvents, forKey: Self.notchEventsKey)
         defaults.set(notchPeek, forKey: Self.notchPeekKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)
