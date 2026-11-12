@@ -8,7 +8,9 @@ APP_NAME="Tacho"
 APP_DIR="$(pwd)/dist/${APP_NAME}.app"
 DMG_PATH="$(pwd)/dist/${APP_NAME}.dmg"
 
-./build-app.sh
+# Releases stay signed ad-hoc until a self-signed build is known to open
+# cleanly on other people's Macs; local builds use the certificate.
+TACHO_SIGN_IDENTITY="${TACHO_SIGN_IDENTITY:--}" ./build-app.sh
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_DIR/Contents/Info.plist")
 

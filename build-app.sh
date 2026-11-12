@@ -45,8 +45,18 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ad-hoc signature so macOS is happy launching an unsigned local build.
-codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+# Signed with the self-signed "Tacho Signing" certificate when this Mac has
+# it. macOS then keys permissions such as Accessibility to the certificate,
+# so they survive rebuilds and updates; an ad-hoc signature changes with
+# every build and loses them. Without the certificate, sign ad-hoc.
+# TACHO_SIGN_IDENTITY=- forces ad-hoc, as build-dmg.sh does for releases.
+IDENTITY="${TACHO_SIGN_IDENTITY:-Tacho Signing}"
+if [ "$IDENTITY" != "-" ] && security find-identity -p codesigning | grep -q "\"$IDENTITY\""; then
+    codesign --force --deep --sign "$IDENTITY" "$APP_DIR"
+else
+    [ "$IDENTITY" = "-" ] || echo "    (no \"$IDENTITY\" certificate; signing ad-hoc)"
+    codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+fi
 
 echo "==> Done: $APP_DIR"
 echo "    open \"$APP_DIR\""
