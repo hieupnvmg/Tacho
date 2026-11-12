@@ -1402,6 +1402,11 @@ final class NotchController {
     /// A sideways swipe in progress, added up until it is far enough.
     private var swipe: CGFloat = 0
     private var swipeDone = false
+    /// The current gesture went sideways, so its momentum is the panel's too.
+    private var swipeSideways = false
+    /// No new page turn before this, so one flick turns one page.
+    private var swipeCooldown = Date.distantPast
+    private var lastScroll = Date.distantPast
     private var meetingsOn = false
     /// Meeting reminders already shown, by meeting and kind.
     private var announced: Set<String> = []
@@ -1781,17 +1786,39 @@ final class NotchController {
     }
 
     /// Whether the panel takes this scroll as a page swipe.
+    /// One swipe turns one page. A Magic Mouse keeps sending momentum
+    /// scrolls after the finger lifts, and counting those as a new swipe
+    /// skipped a page, so momentum never turns one, and after a turn the
+    /// panel waits a moment before taking the next.
     private func takesSwipe(_ event: NSEvent) -> Bool {
         guard model.mode == .peek, model.hasPages, event.window === panel else { return false }
-        let pages = model.pages
-        let index = pages.firstIndex(of: model.page) ?? 0
-        if event.phase == .began || event.phase == .mayBegin { swipe = 0; swipeDone = false }
         let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+        let now = Date()
+
+        // Momentum after the fingers lift: swallowed if sideways, never counted.
+        if !event.momentumPhase.isEmpty {
+            return sideways && swipeSideways
+        }
+        if event.phase == .began || event.phase == .mayBegin {
+            swipe = 0
+            swipeDone = false
+            swipeSideways = false
+        } else if event.phase.isEmpty, now.timeIntervalSince(lastScroll) > 0.3 {
+            // A wheel without gesture phases: a pause starts a new swipe.
+            swipe = 0
+            swipeDone = false
+        }
+        lastScroll = now
         guard sideways || swipe != 0 else { return false }
-        if !swipeDone {
+        if sideways { swipeSideways = true }
+
+        if !swipeDone, now >= swipeCooldown {
             swipe += event.scrollingDeltaX
             if abs(swipe) > 40 {
                 swipeDone = true
+                swipeCooldown = now.addingTimeInterval(0.4)
+                let pages = model.pages
+                let index = pages.firstIndex(of: model.page) ?? 0
                 // Content follows the fingers: swiping left brings the next page.
                 let next = min(max(index + (swipe < 0 ? 1 : -1), 0), pages.count - 1)
                 let target = pages[next]
@@ -1801,9 +1828,8 @@ final class NotchController {
                 }
             }
         }
-        if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
+        if event.phase == .ended || event.phase == .cancelled {
             swipe = 0
-            swipeDone = false
         }
         // Sideways swipes are the panel's; vertical ones still scroll lists.
         return sideways
