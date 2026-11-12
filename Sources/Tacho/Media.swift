@@ -270,8 +270,17 @@ struct ActiveCall: Equatable {
         name.replacingOccurrences(of: "Microsoft ", with: "")
     }
 
+    /// Opening the app through Launch Services also brings back a minimised
+    /// or closed call window, and is not refused the way activating another
+    /// app from a background app can be.
     func activate() {
-        NSRunningApplication(processIdentifier: pid)?.activate()
+        guard let app = NSRunningApplication(processIdentifier: pid) else { return }
+        guard let url = app.bundleURL else { app.activate(); return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            if error != nil { DispatchQueue.main.async { app.activate() } }
+        }
     }
 }
 
@@ -302,22 +311,34 @@ enum CallDetector {
                   let bundleID = AudioOutputs.string(process, kAudioProcessPropertyBundleID),
                   bundleID != ownID else { continue }
 
-            // Helpers ("com.microsoft.teams2.helper") belong to the app whose
-            // identifier they extend.
-            let owner = running
-                .filter { app in
-                    guard let id = app.bundleIdentifier else { return false }
-                    return bundleID == id || bundleID.hasPrefix(id + ".")
-                }
-                .max { ($0.bundleIdentifier?.count ?? 0) < ($1.bundleIdentifier?.count ?? 0) }
+            // Helpers ("com.microsoft.teams2.modulehost") belong to the app
+            // whose identifier they extend. Helpers are running apps too, but
+            // without windows, so the app with a Dock icon wins.
+            let processPID = AudioOutputs.value(process, kAudioProcessPropertyPID, default: pid_t(0))
+            let matches = running.filter { app in
+                guard let id = app.bundleIdentifier else { return false }
+                return bundleID == id || bundleID.hasPrefix(id + ".")
+            }
+            let owner = matches.filter { $0.activationPolicy == .regular }
+                .min { ($0.bundleIdentifier?.count ?? 0) < ($1.bundleIdentifier?.count ?? 0) }
+                ?? containingApp(of: processPID, in: running)
+                ?? matches.max { ($0.bundleIdentifier?.count ?? 0) < ($1.bundleIdentifier?.count ?? 0) }
             let appID = owner?.bundleIdentifier ?? bundleID
             if appID.hasPrefix("com.apple.") && !appleCallApps.contains(appID) { continue }
 
-            let pid = owner?.processIdentifier
-                ?? AudioOutputs.value(process, kAudioProcessPropertyPID, default: pid_t(0))
-            return (appID, pid, owner?.localizedName ?? appID)
+            return (appID, owner?.processIdentifier ?? processPID, owner?.localizedName ?? appID)
         }
         return nil
+    }
+
+    /// The regular app whose bundle holds this helper process, for helpers
+    /// whose identifier does not extend the app's.
+    private static func containingApp(of pid: pid_t, in running: [NSRunningApplication]) -> NSRunningApplication? {
+        guard let path = NSRunningApplication(processIdentifier: pid)?.bundleURL?.path else { return nil }
+        return running.first { app in
+            guard app.activationPolicy == .regular, let appPath = app.bundleURL?.path else { return false }
+            return path.hasPrefix(appPath + "/")
+        }
     }
 
     /// The meeting's name, from the call window's title. Window titles of
@@ -351,6 +372,21 @@ final class NotchMedia: ObservableObject {
     @Published private(set) var outputs: [AudioOutput] = []
     @Published private(set) var selectedOutput: AudioDeviceID = 0
     @Published private(set) var call: ActiveCall?
+    /// Read alongside the call, for its row in the panel.
+    @Published private(set) var micMuted = false
+    @Published private(set) var cameraOn = false
+
+    func refreshDevices() {
+        let muted = Microphone.isMuted
+        if muted != micMuted { micMuted = muted }
+        let camera = Camera.isOn
+        if camera != cameraOn { cameraOn = camera }
+    }
+
+    func toggleMic() {
+        Microphone.setMuted(!micMuted)
+        micMuted = Microphone.isMuted
+    }
 
     /// When the microphone was last seen free during a call. Muting can
     /// release it for a moment, so a call only ends after a short quiet spell.

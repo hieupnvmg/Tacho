@@ -11,6 +11,7 @@ struct SettingsView: View {
     @StateObject private var loginItem = LoginItem()
     @StateObject private var runnerImport = RunnerImportModel()
     @ObservedObject private var runners = RunnerLibrary.shared
+    @ObservedObject private var meetings = MeetingWatcher.shared
 
     var body: some View {
         Form {
@@ -116,15 +117,36 @@ struct SettingsView: View {
             Section(L("Tai thỏ (notch)")) {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Báo sự kiện ở tai thỏ"), isOn: $settings.notchEvents)
-                    Text(L("Cắm hoặc rút sạc, kết nối chuột, bàn phím, tai nghe, mất hoặc có mạng lại, cuộc gọi bắt đầu hoặc kết thúc: tai thỏ giãn ra hai bên trong vài giây."))
+                    Text(L("Cắm hoặc rút sạc, pin yếu, kết nối chuột, bàn phím, tai nghe, mất hoặc có mạng lại, cuộc gọi bắt đầu hoặc kết thúc, app ngốn CPU, CPU quá nóng, hết RAM: tai thỏ giãn ra hai bên trong vài giây. Khi đang chia sẻ màn hình trong cuộc gọi, tai thỏ viền đỏ."))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Rê chuột vào tai thỏ để mở bảng điều khiển"), isOn: $settings.notchPeek)
-                    Text(L("Bài đang phát với nút điều khiển (YouTube, Spotify, Nhạc…), chọn loa hoặc tai nghe để phát ra, và cuộc gọi đang diễn ra (Teams, Zoom…)."))
+                    Text(L("Bài đang phát với nút điều khiển (YouTube, Spotify, Nhạc…), chọn loa hoặc tai nghe, cuộc gọi đang diễn ra với nút tắt micro, và kệ để thả file tạm."))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Lịch sử clipboard trong tai thỏ"), isOn: $settings.notchClipboard)
+                    Text(L("Vuốt ngang trên bảng tai thỏ để xem 20 mục copy gần nhất, bấm để copy lại. Chỉ giữ trong bộ nhớ, bỏ qua mật khẩu từ trình quản lý mật khẩu."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Nhắc cuộc họp từ Lịch"), isOn: $settings.notchMeetings)
+                    Text(L("Báo trước 5 phút và có nút Vào họp. Cuộc họp Teams hiện ở đây khi tài khoản Microsoft 365 đã thêm trong Cài đặt hệ thống → Tài khoản Internet."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    if settings.notchMeetings && meetings.access == .denied {
+                        Button(L("Tacho chưa được đọc Lịch. Mở Cài đặt…")) {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.link)
+                        .font(.system(size: 10))
+                    }
                 }
                 if NotchGeometry.current() == nil {
                     Text(L("Màn hình hiện tại không có tai thỏ, nên chưa thấy gì."))

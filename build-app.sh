@@ -41,6 +41,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>Tacho shows your next meeting in the notch, with a button to join it.</string>
+    <key>NSCalendarsUsageDescription</key><string>Tacho shows your next meeting in the notch, with a button to join it.</string>
 </dict>
 </plist>
 PLIST

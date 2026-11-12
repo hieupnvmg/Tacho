@@ -63,6 +63,10 @@ final class MenuBarSettings: ObservableObject {
     @Published var notchEvents: Bool { didSet { persist() } }
     /// Resting the pointer on the notch opens a small dashboard there.
     @Published var notchPeek: Bool { didSet { persist() } }
+    /// The next meeting from the Mac's calendars, in the notch.
+    @Published var notchMeetings: Bool { didSet { persist() } }
+    /// A second page in the notch panel with what was copied lately.
+    @Published var notchClipboard: Bool { didSet { persist() } }
     /// Controls the only outbound request the app makes. Off means the app
     /// talks to nothing outside this machine.
     @Published var checkConnectivity: Bool { didSet { persist() } }
@@ -86,6 +90,8 @@ final class MenuBarSettings: ObservableObject {
     private static let runnerKey = "menubar.runner"
     private static let notchEventsKey = "notch.events"
     private static let notchPeekKey = "notch.peek"
+    private static let notchMeetingsKey = "notch.meetings"
+    private static let notchClipboardKey = "notch.clipboard"
     private static let dockKey = "menubar.hideDockIcon"
     private static let probeKey = "network.checkConnectivity"
     /// Every module this install has already seen, so later additions can be
@@ -116,6 +122,8 @@ final class MenuBarSettings: ObservableObject {
         runnerID = defaults.string(forKey: Self.runnerKey) ?? Runner.defaultID
         notchEvents = defaults.bool(forKey: Self.notchEventsKey)
         notchPeek = defaults.bool(forKey: Self.notchPeekKey)
+        notchMeetings = defaults.bool(forKey: Self.notchMeetingsKey)
+        notchClipboard = defaults.bool(forKey: Self.notchClipboardKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
         checkConnectivity = defaults.object(forKey: Self.probeKey) as? Bool ?? true
         language = L10n.current
@@ -154,6 +162,8 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(runnerID, forKey: Self.runnerKey)
         defaults.set(notchEvents, forKey: Self.notchEventsKey)
         defaults.set(notchPeek, forKey: Self.notchPeekKey)
+        defaults.set(notchMeetings, forKey: Self.notchMeetingsKey)
+        defaults.set(notchClipboard, forKey: Self.notchClipboardKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)
         defaults.set(checkConnectivity, forKey: Self.probeKey)
         defaults.set(language.rawValue, forKey: L10n.defaultsKey)

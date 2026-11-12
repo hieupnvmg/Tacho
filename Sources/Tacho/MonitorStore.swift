@@ -15,6 +15,11 @@ final class MonitorStore: ObservableObject {
     /// Apps with their helper processes added up, for the popovers.
     @Published private(set) var appsByCPU: [AppUsage] = []
     @Published private(set) var appsByMemory: [AppUsage] = []
+    /// When the process list last refreshed, so callers can tell a fresh one.
+    private(set) var processesUpdated = Date.distantPast
+    /// The notch watches for one app hogging the CPU. The process list is
+    /// then fetched now and then, but only while the CPU is busy at all.
+    var watchHeavyApps = false
     @Published private(set) var connectivity = ConnectivitySample()
     @Published private(set) var swapHistory: [Double] = []
     @Published private(set) var gpu = GPUSample()
@@ -138,7 +143,8 @@ final class MonitorStore: ObservableObject {
         tick += 1
         // Spawning ps is the most expensive part of a sample, and only the
         // Processes tab and the CPU and memory popovers show the result.
-        let wantsProcesses = wantsProcessList && (tick % 3 == 1 || processes.isEmpty)
+        let wantsProcesses = (wantsProcessList && (tick % 3 == 1 || processes.isEmpty))
+            || (watchHeavyApps && tick % 5 == 0 && cpu.busy > 0.25)
         let wantsVolumes = tick % 30 == 1
         // Die temperature and fan speed drift over seconds; each of the ~35
         // SMC keys is a kernel round trip, so they are read every third tick.
@@ -239,6 +245,7 @@ final class MonitorStore: ObservableObject {
 
     private func apply(_ ranking: ProcessRanking) {
         processes = ranking.byCPU
+        processesUpdated = Date()
         appsByCPU = ranking.appsByCPU
         appsByMemory = ranking.appsByMemory
     }

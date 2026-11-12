@@ -35,6 +35,12 @@ enum NotchEvent: Hashable {
     case online
     case callStarted(String)
     case callEnded(String)
+    /// A resource alert starting: its symbol, short text, and whether it is
+    /// serious (red) rather than a warning (amber).
+    case resource(symbol: String, text: String, critical: Bool)
+    case meetingSoon(minutes: Int)
+    case meetingNow
+    case lowBattery(Int)
 
     var symbol: String {
         switch self {
@@ -52,6 +58,10 @@ enum NotchEvent: Hashable {
         case .online: return "wifi"
         case .callStarted: return "phone.fill"
         case .callEnded: return "phone.down.fill"
+        case .resource(let symbol, _, _): return symbol
+        case .meetingSoon: return "calendar"
+        case .meetingNow: return "video.fill"
+        case .lowBattery: return "battery.25"
         }
     }
 
@@ -63,6 +73,10 @@ enum NotchEvent: Hashable {
         case .online: return L("Có mạng")
         case .callStarted(let app): return app
         case .callEnded(let duration): return duration
+        case .resource(_, let text, _): return text
+        case .meetingSoon(let minutes): return L("%d phút", minutes)
+        case .meetingNow: return L("Bắt đầu")
+        case .lowBattery(let percent): return "\(percent)%"
         }
     }
 
@@ -73,6 +87,9 @@ enum NotchEvent: Hashable {
         case .offline: return Palette.critical
         case .unplugged(let percent), .device(_, let percent):
             return percent <= 20 ? Palette.critical : .white
+        case .resource(_, _, let critical): return critical ? Palette.critical : Palette.warning
+        case .meetingSoon, .meetingNow: return Palette.cpu
+        case .lowBattery: return Palette.critical
         }
     }
 
@@ -94,6 +111,9 @@ final class NotchModel: ObservableObject {
         case idle
         case event(NotchEvent)
         case peek
+        /// The screen is being shared in a meeting: a red glow round the
+        /// notch, for as long as it lasts.
+        case sharing
     }
 
     struct Layout {
@@ -106,11 +126,24 @@ final class NotchModel: ObservableObject {
     @Published var mode: Mode = .hidden
     var notch = CGSize(width: 185, height: 32)
 
-    /// A call in progress adds a row to the panel.
+    /// A call in progress, a meeting coming up and a resource alert each add
+    /// a row to the panel.
     @Published var hasCall = false
-    private static let bodyHeight: CGFloat = 138
-    private static let callRowHeight: CGFloat = 60
-    var peekBodyHeight: CGFloat { Self.bodyHeight + (hasCall ? Self.callRowHeight : 0) }
+    @Published var hasMeeting = false
+    @Published var hasAlert = false
+    /// The panel has a second page, the clipboard, swiped to sideways.
+    @Published var hasPages = false
+    @Published var page = 0
+    /// Music, outputs, and the shelf.
+    private static let bodyHeight: CGFloat = 190
+    private static let rowHeight: CGFloat = 60
+    private var extraRows: Int { [hasCall, hasMeeting, hasAlert].filter { $0 }.count }
+    /// The page dots under the panel's rows.
+    static let dotsHeight: CGFloat = 16
+    var peekBodyHeight: CGFloat {
+        Self.bodyHeight + Self.rowHeight * CGFloat(extraRows) + (hasPages ? Self.dotsHeight : 0)
+    }
+
     var peekInnerWidth: CGFloat { max(notch.width + 236, 430) }
 
     func layout(_ mode: Mode) -> Layout {
@@ -123,12 +156,15 @@ final class NotchModel: ObservableObject {
         case .peek:
             return Layout(size: CGSize(width: peekInnerWidth + 24, height: notch.height + peekBodyHeight),
                           shoulder: 12, corner: 26)
+        case .sharing:
+            return Layout(size: CGSize(width: notch.width + 28, height: notch.height + 2), shoulder: 5, corner: 11)
         }
     }
 
     /// The window: the largest shape plus room for its shadow.
     var canvas: CGSize {
-        CGSize(width: peekInnerWidth + 24 + 80, height: notch.height + Self.bodyHeight + Self.callRowHeight + 44)
+        CGSize(width: peekInnerWidth + 24 + 80,
+               height: notch.height + Self.bodyHeight + Self.rowHeight * 3 + Self.dotsHeight + 44)
     }
 }
 
@@ -207,10 +243,20 @@ private extension View {
     }
 }
 
-struct NotchView: View {
-    @ObservedObject var model: NotchModel
+/// The objects the panel shows, passed down together.
+struct NotchParts {
     let store: MonitorStore
     let media: NotchMedia
+    let resources: ResourceWatch
+    let meetings: MeetingWatcher
+    let shelf: NotchShelf
+    let keepAwake: KeepAwake
+    let clipboard: ClipboardHistory
+}
+
+struct NotchView: View {
+    @ObservedObject var model: NotchModel
+    let parts: NotchParts
     let reduceMotion: Bool
     var onClick: () -> Void
 
@@ -240,6 +286,7 @@ struct NotchView: View {
         switch model.mode {
         case .event(let event): return event.tint.opacity(0.35)
         case .peek: return .black.opacity(0.5)
+        case .sharing: return Palette.critical.opacity(0.85)
         case .hidden, .idle: return .clear
         }
     }
@@ -251,7 +298,12 @@ struct NotchView: View {
                 .id(event)
                 .transition(.notchContent(reduceMotion: reduceMotion))
         case .peek:
-            NotchPeek(store: store, media: media, notch: model.notch, onOpenTacho: onClick)
+            NotchPeek(model: model, parts: parts, store: parts.store, media: parts.media,
+                      resources: parts.resources, meetings: parts.meetings, keepAwake: parts.keepAwake,
+                      notch: model.notch, onOpenTacho: onClick)
+                .transition(.notchContent(reduceMotion: reduceMotion))
+        case .sharing:
+            SharingMarks(notch: model.notch)
                 .transition(.notchContent(reduceMotion: reduceMotion))
         case .hidden, .idle:
             EmptyView()
@@ -335,8 +387,13 @@ private struct NotchButtonStyle: ButtonStyle {
 }
 
 private struct NotchPeek: View {
+    @ObservedObject var model: NotchModel
+    let parts: NotchParts
     @ObservedObject var store: MonitorStore
     @ObservedObject var media: NotchMedia
+    @ObservedObject var resources: ResourceWatch
+    @ObservedObject var meetings: MeetingWatcher
+    @ObservedObject var keepAwake: KeepAwake
     let notch: CGSize
     var onOpenTacho: () -> Void
 
@@ -354,7 +411,9 @@ private struct NotchPeek: View {
                     }
                 }
                 .buttonStyle(NotchButtonStyle())
-                .frame(maxWidth: .infinity, alignment: .leading)
+                awakeButton
+                    .padding(.leading, 10)
+                Spacer(minLength: 0)
 
                 Color.clear.frame(width: notch.width)
 
@@ -362,19 +421,86 @@ private struct NotchPeek: View {
             }
             .frame(height: notch.height)
 
+            ZStack(alignment: .top) {
+                if model.page == 0 {
+                    mainPage
+                        .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity),
+                                                removal: .move(edge: .leading).combined(with: .opacity)))
+                } else {
+                    ClipboardPage(clipboard: parts.clipboard)
+                        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
+                                                removal: .move(edge: .trailing).combined(with: .opacity)))
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .clipped()
+            if model.hasPages {
+                PageDots(page: $model.page)
+                    .frame(height: NotchModel.dotsHeight - 8)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, model.hasPages ? 6 : 0)
+    }
+
+    private var mainPage: some View {
+        VStack(spacing: 8) {
+            if let alert = resources.current {
+                AlertRow(alert: alert).riseIn(0)
+            }
+            if let meeting = meetings.next, MeetingRow.shows(meeting) {
+                MeetingRow(meeting: meeting).riseIn(0)
+            }
             if let call = media.call {
-                CallRow(call: call).riseIn(0)
+                CallRow(call: call, media: media).riseIn(0)
             }
             NowPlayingRow(media: media).riseIn(1)
             OutputRow(media: media).riseIn(2)
+            ShelfView(shelf: parts.shelf)
+                .frame(height: 44)
+                .riseIn(3)
         }
-        .padding(.horizontal, 12)
+    }
+
+    /// Keeps the Mac awake: a click turns it on until clicked again, the
+    /// menu sets a time limit.
+    private var awakeButton: some View {
+        Button { keepAwake.toggle() } label: {
+            HStack(spacing: 3) {
+                Image(systemName: keepAwake.isOn ? "cup.and.saucer.fill" : "cup.and.saucer")
+                    .font(.system(size: 12, weight: .semibold))
+                if let until = keepAwake.until {
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        Text(Fmt.minutes(max(1, Int(until.timeIntervalSince(context.date) / 60))))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                    }
+                }
+            }
+            .foregroundStyle(keepAwake.isOn ? Palette.warning : .white.opacity(0.45))
+            .frame(height: 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(NotchButtonStyle())
+        .help(keepAwake.isOn ? L("Đang giữ máy thức. Bấm để tắt.") : L("Giữ máy thức. Chuột phải để chọn thời gian."))
+        .contextMenu {
+            Button(L("Giữ thức 1 giờ")) { keepAwake.start(hours: 1) }
+            Button(L("Giữ thức 2 giờ")) { keepAwake.start(hours: 2) }
+            Button(L("Giữ thức đến khi tắt")) { keepAwake.start(hours: nil) }
+            if keepAwake.isOn { Button(L("Tắt")) { keepAwake.stop() } }
+        }
     }
 
     @ViewBuilder private var battery: some View {
         let sample = store.battery
         if sample.isPresent {
             HStack(spacing: 6) {
+                if sample.isCharging && sample.timeRemaining > 0 {
+                    Text(L("Đầy sau ") + Fmt.minutes(sample.timeRemaining))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Palette.memory.opacity(0.9))
+                        .lineLimit(1)
+                }
                 Text(String(format: "%.0f%%", sample.percentage * 100))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .monospacedDigit()
@@ -390,6 +516,7 @@ private struct NotchPeek: View {
 
 private struct CallRow: View {
     let call: ActiveCall
+    @ObservedObject var media: NotchMedia
 
     var body: some View {
         HStack(spacing: 10) {
@@ -411,10 +538,17 @@ private struct CallRow: View {
                 Text(call.name)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
-                Text(call.title ?? L("Đang trong cuộc gọi"))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if media.cameraOn {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Palette.memory)
+                    }
+                    Text(call.title ?? L("Đang trong cuộc gọi"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 8)
             TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -423,6 +557,15 @@ private struct CallRow: View {
                     .monospacedDigit()
                     .foregroundStyle(Palette.memory)
             }
+            Button { media.toggleMic() } label: {
+                Image(systemName: media.micMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(media.micMuted ? Color.white : .white.opacity(0.85))
+                    .frame(width: 28, height: 24)
+                    .background(Capsule().fill(media.micMuted ? Palette.critical : Color.white.opacity(0.14)))
+            }
+            .buttonStyle(NotchButtonStyle())
+            .help(media.micMuted ? L("Bật micro") : L("Tắt micro"))
             Button { call.activate() } label: {
                 Text(L("Mở"))
                     .font(.system(size: 11, weight: .semibold))
@@ -437,7 +580,11 @@ private struct CallRow: View {
         .frame(height: 52)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.memory.opacity(0.13)))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-            .strokeBorder(Palette.memory.opacity(0.28), lineWidth: 1))
+            .strokeBorder(Palette.memory.opacity(0.28), lineWidth: 1)
+            .allowsHitTesting(false))
+        // The whole row opens the call, not just the small button.
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture { call.activate() }
     }
 }
 
@@ -557,11 +704,11 @@ private struct OutputRow: View {
                 .tracking(0.6)
                 .foregroundStyle(.white.opacity(0.4))
                 .padding(.leading, 2)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(media.outputs) { output in
-                        chip(output, selected: output.id == media.selectedOutput)
-                    }
+            // Sideways swipes turn the page, so the chips share the width
+            // instead of scrolling.
+            HStack(spacing: 6) {
+                ForEach(media.outputs.prefix(5)) { output in
+                    chip(output, selected: output.id == media.selectedOutput)
                 }
             }
         }
@@ -574,14 +721,409 @@ private struct OutputRow: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: output.symbol).font(.system(size: 11, weight: .medium))
-                Text(output.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                Text(output.name).font(.system(size: 11, weight: .medium)).lineLimit(1).truncationMode(.tail)
             }
             .padding(.horizontal, 10)
+            .frame(maxWidth: selected ? nil : .infinity)
             .frame(height: 26)
             .foregroundStyle(selected ? Color.black : Color.white.opacity(0.85))
             .background(Capsule().fill(selected ? Color.white : Color.white.opacity(0.09)))
         }
         .buttonStyle(NotchButtonStyle())
+    }
+}
+
+/// A resource alert: what is wrong, and a way to act on it.
+private struct AlertRow: View {
+    let alert: ResourceAlert
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                if let icon = alert.icon {
+                    Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                } else {
+                    Image(systemName: alert.symbol)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(alert.tint)
+                        .frame(width: 30, height: 30)
+                }
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(alert.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text(alert.detail)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if let app = alert.app {
+                Button { app.terminate() } label: {
+                    Text(L("Thoát"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 11)
+                        .frame(height: 24)
+                        .background(Capsule().fill(alert.tint.opacity(0.6)))
+                }
+                .buttonStyle(NotchButtonStyle())
+            }
+            Button { ActivityMonitor.open() } label: {
+                if let icon = ActivityMonitor.icon {
+                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                }
+            }
+            .buttonStyle(NotchButtonStyle())
+            .help(L("Mở Activity Monitor"))
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 52)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(alert.tint.opacity(0.13)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(alert.tint.opacity(0.28), lineWidth: 1)
+            .allowsHitTesting(false))
+    }
+}
+
+/// The next meeting from the calendar, with a button to join it.
+private struct MeetingRow: View {
+    let meeting: Meeting
+
+    /// Within the hour before it starts, and while it runs.
+    static func shows(_ meeting: Meeting, at date: Date = Date()) -> Bool {
+        date >= meeting.start.addingTimeInterval(-3600) && date < meeting.end
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(meeting.color.opacity(0.25))
+                Image(systemName: meeting.joinURL == nil ? "calendar" : "video.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(meeting.color)
+            }
+            .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(meeting.title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text(when(at: context.date))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            if meeting.joinURL != nil {
+                Button { meeting.join() } label: {
+                    Text(L("Vào họp"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 11)
+                        .frame(height: 24)
+                        .background(Capsule().fill(Palette.cpu.opacity(0.75)))
+                }
+                .buttonStyle(NotchButtonStyle())
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 52)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.07)))
+    }
+
+    private func when(at date: Date) -> String {
+        let format = DateFormatter()
+        format.timeStyle = .short
+        format.dateStyle = .none
+        let range = format.string(from: meeting.start) + "–" + format.string(from: meeting.end)
+        if date >= meeting.start {
+            let left = Int(meeting.end.timeIntervalSince(date) / 60)
+            return L("Đang diễn ra · còn %d phút", max(left, 1))
+        }
+        let minutes = Int((meeting.start.timeIntervalSince(date) / 60).rounded(.up))
+        return L("Sau %d phút · %@", minutes, range)
+    }
+}
+
+/// Files dropped on the notch, to drag out again later.
+private struct ShelfView: View {
+    @ObservedObject var shelf: NotchShelf
+    @StateObject private var targeted = NotchFlag()
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if shelf.files.isEmpty {
+                Image(systemName: "tray.and.arrow.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                Text(L("Thả file vào đây"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            } else {
+                HStack(spacing: 4) {
+                        ForEach(shelf.files, id: \.self) { url in
+                            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                                .resizable()
+                                .frame(width: 28, height: 28)
+                                .help(url.lastPathComponent)
+                                .onDrag { NSItemProvider(object: url as NSURL) }
+                                .contextMenu {
+                                    Button(L("Hiện trong Finder")) {
+                                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                                    }
+                                    Button(L("Bỏ khỏi kệ")) { shelf.remove(url) }
+                                }
+                        }
+                }
+                Spacer(minLength: 0)
+                Button { shelf.clear() } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+                .buttonStyle(NotchButtonStyle())
+                .help(L("Dọn kệ"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color.white.opacity(targeted.on ? 0.16 : 0.07)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(Color.white.opacity(targeted.on ? 0.5 : 0.15),
+                          style: StrokeStyle(lineWidth: 1, dash: shelf.files.isEmpty ? [4] : []))
+            .allowsHitTesting(false))
+        .onDrop(of: [.fileURL], isTargeted: Binding(get: { targeted.on }, set: { targeted.on = $0 })) { providers in
+            for provider in providers {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    DispatchQueue.main.async { MainActor.assumeIsolated { shelf.add([url]) } }
+                }
+            }
+            return true
+        }
+    }
+}
+
+/// The red glow's companions while the screen is shared: a dot pulsing
+/// either side of the notch.
+private struct SharingMarks: View {
+    let notch: CGSize
+    @StateObject private var pulse = NotchFlag()
+
+    var body: some View {
+        HStack {
+            dot
+            Spacer(minLength: notch.width)
+            dot
+        }
+        .padding(.horizontal, 3)
+        .frame(height: notch.height)
+        .onAppear { pulse.on = true }
+    }
+
+    private var dot: some View {
+        Circle()
+            .fill(Palette.critical)
+            .frame(width: 6, height: 6)
+            .opacity(pulse.on ? 1 : 0.35)
+            .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: pulse.on)
+    }
+}
+
+/// Which page the panel shows, and a click to change it.
+private struct PageDots: View {
+    @Binding var page: Int
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<2, id: \.self) { index in
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { page = index }
+                } label: {
+                    Capsule()
+                        .fill(Color.white.opacity(page == index ? 0.85 : 0.25))
+                        .frame(width: page == index ? 14 : 6, height: 6)
+                        .padding(4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+/// The second page: what was copied lately. A click copies it again.
+private struct ClipboardPage: View {
+    @ObservedObject var clipboard: ClipboardHistory
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L("Clipboard"))
+                    .textCase(.uppercase)
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.4))
+                Spacer()
+                if !clipboard.items.isEmpty {
+                    Button(L("Xoá hết")) { clipboard.clear() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+            }
+            .padding(.horizontal, 2)
+            if !clipboard.items.isEmpty {
+                searchField
+            }
+            if clipboard.items.isEmpty {
+                VStack(spacing: 6) {
+                    Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 22))
+                        .foregroundStyle(.white.opacity(0.3))
+                    Text(L("Những gì bạn copy sẽ hiện ở đây."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 4) {
+                        if clipboard.filtered.isEmpty {
+                            Text(L("Không có mục nào khớp."))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .padding(.top, 12)
+                        }
+                        ForEach(clipboard.filtered) { item in
+                            ClipboardRow(item: item, copied: clipboard.justCopied == item.id,
+                                         onCopy: { clipboard.copy(item) }, onRemove: { clipboard.remove(item) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private extension ClipboardPage {
+    var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.45))
+            TextField(L("Tìm trong clipboard"), text: $clipboard.query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(.white)
+                .onExitCommand { clipboard.query = "" }
+            if !clipboard.query.isEmpty {
+                Button { clipboard.query = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.1)))
+    }
+}
+
+private struct ClipboardRow: View {
+    let item: ClipboardHistory.Item
+    let copied: Bool
+    var onCopy: () -> Void
+    var onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            preview
+            Spacer(minLength: 6)
+            if copied {
+                Text(L("Đã copy"))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Palette.memory)
+            } else {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text(Self.ago(item.date, now: context.date))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+            }
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.4))
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 34)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(copied ? Palette.memory.opacity(0.18) : Color.white.opacity(0.07)))
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .onTapGesture(perform: onCopy)
+        .help(L("Bấm để copy lại"))
+    }
+
+    /// "now", "5 min", "2 hr": short enough for the row's edge.
+    private static let agoFormat: RelativeDateTimeFormatter = {
+        let format = RelativeDateTimeFormatter()
+        format.unitsStyle = .short
+        format.locale = Locale(identifier: L10n.current.rawValue)
+        return format
+    }()
+
+    static func ago(_ date: Date, now: Date) -> String {
+        now.timeIntervalSince(date) < 60 ? L("vừa xong") : agoFormat.localizedString(for: date, relativeTo: now)
+    }
+
+    @ViewBuilder private var preview: some View {
+        HStack(spacing: 8) {
+            if let icon = item.icon {
+                Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+            }
+            switch item.content {
+            case .text(let text):
+                Text(text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        .replacingOccurrences(of: "\n", with: " ⏎ "))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            case .image(let image):
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 60, maxHeight: 26)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                Text(L("Ảnh")).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+            case .files(let urls):
+                Image(nsImage: NSWorkspace.shared.icon(forFile: urls[0].path))
+                    .resizable().frame(width: 20, height: 20)
+                Text(urls.count == 1 ? urls[0].lastPathComponent : L("%d file", urls.count))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
     }
 }
 
@@ -591,11 +1133,55 @@ private struct OutputRow: View {
 /// MacBook Air M2), which left a strip of wallpaper above the shape. The
 /// panel belongs exactly at the top edge, so it opts out.
 final class NotchPanel: NSPanel {
+    /// Only while the clipboard's search can be typed in. Being a
+    /// non-activating panel, it takes the keyboard without bringing Tacho to
+    /// the front, the way Spotlight does.
+    var allowsKey = false
+
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
 }
 
+/// Sits exactly over the camera housing, painted black so it cannot be
+/// seen. Files dragged there open the panel to drop them on the shelf: a
+/// drag in progress sends no mouse events to other apps, so only a window
+/// under the pointer hears about it. It also reports the pointer resting
+/// there, which the global mouse monitor no longer sees once this window is
+/// under it.
+final class NotchCatcherView: NSView {
+    var onPointer: (() -> Void)?
+    var onDrag: (() -> Void)?
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways,
+                                                               .inVisibleRect],
+                                       owner: self, userInfo: nil))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.black.setFill()
+        bounds.fill()
+    }
+
+    override func mouseEntered(with event: NSEvent) { onPointer?() }
+    override func mouseMoved(with event: NSEvent) { onPointer?() }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        onDrag?()
+        // Not dropped here: the panel opening over it takes the drop.
+        return []
+    }
+}
 
 /// Owns the panel over the notch: watches for events worth showing in its
 /// wings, and for the pointer resting on it.
@@ -604,12 +1190,29 @@ final class NotchController {
     private let store: MonitorStore
     private let model = NotchModel()
     private let media = NotchMedia()
+    private let resources = ResourceWatch()
+    private let meetings = MeetingWatcher.shared
+    private let shelf = NotchShelf()
+    private let keepAwake = KeepAwake()
+    private let clipboard = ClipboardHistory()
+    private var sharing = false
+    /// Holds the sharing glow on for `--notch-demo`, with no real call.
+    private var demoSharing = false
+    /// A sideways swipe in progress, added up until it is far enough.
+    private var swipe: CGFloat = 0
+    private var swipeDone = false
+    private var meetingsOn = false
+    /// Meeting reminders already shown, by meeting and kind.
+    private var announced: Set<String> = []
+    /// The low-battery level last warned about, until the charger goes in.
+    private var batteryWarned: Int?
     /// Refreshes the song and the output list while the panel is open.
     private var peekTimer: Timer?
     private var callTick = 0
     /// Keeps the demo's panel open wherever the pointer is.
     private var demoPinned = false
     private var panel: NSPanel?
+    private var catcher: NSPanel?
     private var panelFrame: CGRect?
     private var geometry: NotchGeometry?
     private var eventsOn = false
@@ -643,6 +1246,24 @@ final class NotchController {
                 self.configure(events: self.eventsOn, peek: self.peekOn)
             }
             .store(in: &cancellables)
+        settings.$notchMeetings
+            .sink { [weak self] on in
+                guard let self else { return }
+                self.meetingsOn = on
+                if on { self.meetings.start() } else { self.meetings.stop() }
+            }
+            .store(in: &cancellables)
+        model.$page
+            .sink { [weak self] page in self?.updateKeyAllowance(page: page) }
+            .store(in: &cancellables)
+        settings.$notchClipboard
+            .sink { [weak self] on in
+                guard let self else { return }
+                if on { self.clipboard.start() } else { self.clipboard.stop() }
+                self.model.hasPages = on
+                if !on { self.model.page = 0 }
+            }
+            .store(in: &cancellables)
         store.onEachSample { [weak self] in self?.checkStore() }
     }
 
@@ -658,6 +1279,9 @@ final class NotchController {
         }
 
         if peek && geometry != nil { installMouseMonitors() } else { removeMouseMonitors() }
+        updateCatcher()
+        store.watchHeavyApps = (events || peek) && geometry != nil
+        if !store.watchHeavyApps { resources.reset() }
         if events && geometry != nil {
             startPowerWatch()
         } else {
@@ -667,7 +1291,33 @@ final class NotchController {
             pending.removeAll()
         }
         if !events, case .event = model.mode { collapse() }
+        if !events, sharing {
+            sharing = false
+            if model.mode == .sharing { collapse() }
+        }
         if !peek, model.mode == .peek { collapse() }
+    }
+
+    private func updateCatcher() {
+        catcher?.orderOut(nil)
+        catcher = nil
+        guard peekOn, let geometry else { return }
+        let panel = NotchPanel(contentRect: geometry.rect, styleMask: [.borderless, .nonactivatingPanel],
+                               backing: .buffered, defer: false)
+        panel.isOpaque = true
+        panel.backgroundColor = .black
+        panel.hasShadow = false
+        // Just under the notch panel, so the panel takes over once open.
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.isReleasedWhenClosed = false
+        let view = NotchCatcherView(frame: CGRect(origin: .zero, size: geometry.rect.size))
+        view.onPointer = { [weak self] in self?.pointerMoved() }
+        view.onDrag = { [weak self] in self?.filesDragged() }
+        panel.contentView = view
+        panel.setFrame(geometry.rect, display: false)
+        panel.orderFrontRegardless()
+        catcher = panel
     }
 
     private func rebuildPanel() {
@@ -690,7 +1340,9 @@ final class NotchController {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
-        let host = NSHostingView(rootView: NotchView(model: model, store: store, media: media, reduceMotion: reduceMotion) {
+        let parts = NotchParts(store: store, media: media, resources: resources, meetings: meetings,
+                               shelf: shelf, keepAwake: keepAwake, clipboard: clipboard)
+        let host = NSHostingView(rootView: NotchView(model: model, parts: parts, reduceMotion: reduceMotion) {
             [weak self] in
             self?.collapse()
             MenuBarPopover.openMainWindow()
@@ -738,9 +1390,20 @@ final class NotchController {
         leaveWork?.cancel()
         guard model.mode != .hidden, model.mode != .idle else { return }
         panel?.ignoresMouseEvents = true
+        releaseKeyboard()
+        clipboard.query = ""
         peekTimer?.invalidate()
         peekTimer = nil
         media.stopPlayback()
+
+
+        // While the screen is shared the notch keeps its red glow.
+        if sharing && eventsOn && geometry != nil {
+            guard model.mode != .sharing else { return }
+            withAnimation(collapseAnimation) { model.mode = .sharing }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in self?.showNextEvent() }
+            return
+        }
         withAnimation(collapseAnimation) { model.mode = .idle }
 
         let hide = DispatchWorkItem { [weak self] in
@@ -762,7 +1425,7 @@ final class NotchController {
         case .event, .idle:
             pending.append(event)
             return
-        case .hidden:
+        case .hidden, .sharing:
             break
         }
         expand(to: .event(event))
@@ -787,11 +1450,19 @@ final class NotchController {
         }) {
             mouseMonitors.append(global)
         }
+
         if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { [weak self] event in
             MainActor.assumeIsolated { self?.pointerMoved() }
             return event
         }) {
             mouseMonitors.append(local)
+        }
+        // A two-finger swipe sideways on the panel turns the page.
+        if let scroll = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
+            let consumed = MainActor.assumeIsolated { self?.takesSwipe(event) ?? false }
+            return consumed ? nil : event
+        }) {
+            mouseMonitors.append(scroll)
         }
     }
 
@@ -852,11 +1523,63 @@ final class NotchController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18, execute: hover)
     }
 
+    /// The clipboard page's search can be typed in; the other page never
+    /// takes the keyboard from the app in front.
+    private func updateKeyAllowance(page: Int) {
+        (panel as? NotchPanel)?.allowsKey = page == 1
+        if page != 1 { releaseKeyboard() }
+    }
+
+    private func releaseKeyboard() {
+        guard let panel = panel as? NotchPanel else { return }
+        panel.allowsKey = false
+        if panel.isKeyWindow { panel.resignKey() }
+        clipboard.query = ""
+    }
+
+    /// Whether the panel takes this scroll as a page swipe.
+    private func takesSwipe(_ event: NSEvent) -> Bool {
+        guard model.mode == .peek, model.hasPages, event.window === panel else { return false }
+        if event.phase == .began || event.phase == .mayBegin { swipe = 0; swipeDone = false }
+        let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+        guard sideways || swipe != 0 else { return false }
+        if !swipeDone {
+            swipe += event.scrollingDeltaX
+            if abs(swipe) > 40 {
+                swipeDone = true
+                // Content follows the fingers: swiping left brings the next page.
+                let target = swipe < 0 ? 1 : 0
+                if target != model.page {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { model.page = target }
+                    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+                }
+            }
+        }
+        if event.phase == .ended || event.phase == .cancelled || event.momentumPhase == .ended {
+            swipe = 0
+            swipeDone = false
+        }
+        // Sideways swipes are the panel's; vertical ones still scroll lists.
+        return sideways
+    }
+
+    /// Files dragged onto the notch: open the panel at once, no dwell.
+    private func filesDragged() {
+        guard peekOn, model.mode != .peek else { return }
+        hoverWork?.cancel()
+        hoverWork = nil
+        openPeek()
+    }
+
     private func openPeek() {
         dismissWork?.cancel()
         pending.removeAll()
         media.refreshCall()
+        media.refreshDevices()
+        shelf.prune()
         model.hasCall = media.call != nil
+        model.hasAlert = resources.current != nil
+        model.hasMeeting = meetingShows
         media.refreshOutputs()
         media.startPlayback()
         peekTimer?.invalidate()
@@ -870,6 +1593,7 @@ final class NotchController {
         RunLoop.main.add(timer, forMode: .common)
         peekTimer = timer
         expand(to: .peek)
+        updateKeyAllowance(page: model.page)
         NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .now)
     }
 
@@ -903,6 +1627,16 @@ final class NotchController {
             if let host = panel?.contentView {
                 lines.append("host frame \(host.frame) safe area \(host.safeAreaInsets)")
             }
+            if let call = CallDetector.current() {
+                lines.append("call \(call.name) (\(call.bundleID), pid \(call.pid))")
+            }
+            lines.append("sharing \(ScreenSharing.isSharing)")
+            for window in ScreenSharing.windows() {
+                let bounds = window[kCGWindowBounds as String] as? [String: Any] ?? [:]
+                lines.append("  window \(window[kCGWindowOwnerName as String] ?? "?") layer \(window[kCGWindowLayer as String] ?? "?") "
+                             + "\(bounds["X"] ?? 0),\(bounds["Y"] ?? 0) \(bounds["Width"] ?? 0)x\(bounds["Height"] ?? 0) "
+                             + "alpha \(window[kCGWindowAlpha as String] ?? "?")")
+            }
             print(lines.joined(separator: "\n"))
             exit(0)
         }
@@ -914,8 +1648,13 @@ final class NotchController {
             (1, { self.show(.charging(64)) }),
             (5, { self.show(.device(symbol: "airpodspro", percent: 82)) }),
             (9, { self.show(.callStarted("Teams")) }),
-            (13, { self.demoPinned = true; self.openPeek() }),
-            (19, { self.demoPinned = false; self.collapse() }),
+            (13, { self.show(.resource(symbol: "flame.fill", text: "Chrome 180%", critical: false)) }),
+            (17, { self.show(.meetingSoon(minutes: 5)) }),
+            (21, { self.demoSharing = true; self.sharing = true; self.expand(to: .sharing) }),
+            (25, { self.demoPinned = true; self.openPeek() }),
+            (29, { self.clipboard.addSamples(); withAnimation { self.model.page = 1 } }),
+            (32, { withAnimation { self.model.page = 0 } }),
+            (34, { self.demoPinned = false; self.demoSharing = false; self.sharing = false; self.collapse() }),
         ]
         for (delay, step) in steps {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: step)
@@ -985,8 +1724,56 @@ final class NotchController {
             if hasCall != model.hasCall {
                 withAnimation(expandAnimation) { model.hasCall = hasCall }
             }
+            if hasCall || model.mode == .peek { media.refreshDevices() }
+            // Sharing only happens in a call; outside one there is nothing to look for.
+            let nowSharing = demoSharing || (eventsOn && hasCall && ScreenSharing.isSharing)
+            if nowSharing != sharing {
+                sharing = nowSharing
+                if sharing, model.mode == .hidden {
+                    expand(to: .sharing)
+                } else if !sharing, model.mode == .sharing {
+                    collapse()
+                }
+            }
+        }
+
+        if eventsOn || peekOn {
+            if let started = resources.update(store: store) {
+                show(.resource(symbol: started.symbol, text: started.short, critical: started.kind == .memory))
+            }
+            let hasAlert = resources.current != nil
+            if hasAlert != model.hasAlert {
+                withAnimation(expandAnimation) { model.hasAlert = hasAlert }
+            }
+            let hasMeeting = meetingShows
+            if hasMeeting != model.hasMeeting {
+                withAnimation(expandAnimation) { model.hasMeeting = hasMeeting }
+            }
         }
         guard eventsOn else { return }
+
+        if meetingsOn, let meeting = meetings.next {
+            let until = meeting.start.timeIntervalSinceNow
+            if until > 0, until <= 5 * 60, announced.insert(meeting.id + "|soon").inserted {
+                show(.meetingSoon(minutes: max(1, Int((until / 60).rounded(.up)))))
+            } else if until <= 0, until > -120, announced.insert(meeting.id + "|now").inserted {
+                show(.meetingNow)
+            }
+        }
+
+        let battery = store.battery
+        if battery.isPresent {
+            if battery.isPluggedIn {
+                batteryWarned = nil
+            } else {
+                let percent = Int((battery.percentage * 100).rounded())
+                for level in [10, 20] where percent <= level && (batteryWarned ?? 101) > level {
+                    batteryWarned = level
+                    show(.lowBattery(percent))
+                    break
+                }
+            }
+        }
 
         let devices = store.peripherals
         let ids = Set(devices.map(\.id))
@@ -1008,4 +1795,12 @@ final class NotchController {
             lastOnline = online
         }
     }
+
+    // MARK: Meetings
+
+    private var meetingShows: Bool {
+        guard meetingsOn, let meeting = meetings.next else { return false }
+        return MeetingRow.shows(meeting)
+    }
+
 }
