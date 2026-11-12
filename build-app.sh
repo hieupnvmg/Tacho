@@ -21,6 +21,8 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BUILD_DIR/Tacho" "$APP_DIR/Contents/MacOS/$APP_NAME"
 # Drawn by scripts/make-icon.swift.
 cp Assets/AppIcon.icns "$APP_DIR/Contents/Resources/AppIcon.icns"
+# Menu bar runner frames from RunCat Neo, with their licence and notice.
+cp -R Assets/Runners "$APP_DIR/Contents/Resources/Runners"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

@@ -15,6 +15,9 @@ final class StatusBarController: NSObject {
     /// Used instead of `items` while the compact setting is on.
     private var compactItem: NSStatusItem?
     private var compactView: CompactStatusView?
+    /// The running cat, separate from the readouts in either layout.
+    private var catItem: NSStatusItem?
+    private var cat: RunnerAnimator?
     private var popover = NSPopover()
     private var openModule: MenuBarModule?
     /// A transient popover closes on mouse-down, before the status button's
@@ -45,6 +48,16 @@ final class StatusBarController: NSObject {
             .sink { [weak self] _ in
                 DispatchQueue.main.async { self.map { $0.sync(to: $0.settings.enabled) } }
             }
+            .store(in: &cancellables)
+
+        settings.$runningCat
+            .receive(on: RunLoop.main)
+            .sink { [weak self] on in self?.setCat(on) }
+            .store(in: &cancellables)
+
+        settings.$runner
+            .receive(on: RunLoop.main)
+            .sink { [weak self] runner in self?.cat?.show(runner) }
             .store(in: &cancellables)
 
         settings.$showGraphs
@@ -137,8 +150,30 @@ final class StatusBarController: NSObject {
         refresh()
     }
 
+    private func setCat(_ on: Bool) {
+        if on, catItem == nil {
+            let item = NSStatusBar.system.statusItem(withLength: settings.runner.width)
+            guard let button = item.button else { return }
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            let animator = RunnerAnimator(store: store, item: item, runner: settings.runner)
+            catItem = item
+            cat = animator
+            refresh()
+        } else if !on, let item = catItem {
+            cat?.stop()
+            NSStatusBar.system.removeStatusItem(item)
+            catItem = nil
+            cat = nil
+        }
+    }
+
     /// Redraws every readout and resizes the ones whose text grew or shrank.
     private func refresh() {
+        if let button = catItem?.button {
+            button.toolTip = String(format: "CPU %.0f%%", store.cpu.busy * 100)
+            cat?.updateSpeed()
+        }
         for module in views.keys { render(module) }
         if let item = compactItem, let view = compactView {
             let width = view.preferredWidth
@@ -192,6 +227,8 @@ final class StatusBarController: NSObject {
             anchor = NSRect(x: column.frame.minX, y: 0, width: column.frame.width, height: sender.bounds.height)
         } else if let hit = views.first(where: { $0.value.isDescendant(of: sender) })?.key {
             module = hit
+        } else if catItem?.button === sender {
+            module = .cpu
         } else {
             return
         }

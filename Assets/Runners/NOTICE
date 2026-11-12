@@ -1,0 +1,14 @@
+The animation frames in this folder come from RunCat Neo
+(https://github.com/runcat-dev/RunCatNeo, commit 592cd606e735), by the
+RunCat Neo authors, and are used under the Apache License 2.0 (see LICENSE
+in this folder).
+
+Changes: the frames were copied out of RunCat Neo's asset catalog
+(LocalPackage/Sources/UserInterface/Resources/Media.xcassets/Runners) and
+renamed to <runner>/frame-<n>.png. The images themselves are unchanged.
+
+The way Tacho plays them (Sources/Tacho/Runner.swift: a Core Animation
+keyframe animation masked over the menu bar's text colour, with an eraser
+layer behind it, and the speed curve) follows RunCat Neo's RunnerBarView,
+RunnerLayer, BackgroundLayer and RunnerService, Copyright 2026 Kyome22
+(Takuto Nakamura), also under the Apache License 2.0.

@@ -55,6 +55,10 @@ final class MenuBarSettings: ObservableObject {
     @Published var showGraphs: Bool { didSet { persist() } }
     /// All readouts in one menu bar item instead of one item each.
     @Published var compact: Bool { didSet { persist() } }
+    /// A runner in the menu bar that goes faster as the CPU gets busier.
+    @Published var runningCat: Bool { didSet { persist() } }
+    /// Which runner that is.
+    @Published var runner: Runner { didSet { persist() } }
     /// Short events (charger, accessories, connection) grow out of the notch.
     @Published var notchEvents: Bool { didSet { persist() } }
     /// Resting the pointer on the notch opens a small dashboard there.
@@ -78,6 +82,8 @@ final class MenuBarSettings: ObservableObject {
     private static let enabledKey = "menubar.enabled"
     private static let graphsKey = "menubar.showGraphs"
     private static let compactKey = "menubar.compact"
+    private static let catKey = "menubar.runningCat"
+    private static let runnerKey = "menubar.runner"
     private static let notchEventsKey = "notch.events"
     private static let notchPeekKey = "notch.peek"
     private static let dockKey = "menubar.hideDockIcon"
@@ -106,6 +112,8 @@ final class MenuBarSettings: ObservableObject {
         }
         showGraphs = defaults.object(forKey: Self.graphsKey) as? Bool ?? true
         compact = defaults.bool(forKey: Self.compactKey)
+        runningCat = defaults.bool(forKey: Self.catKey)
+        runner = defaults.string(forKey: Self.runnerKey).flatMap(Runner.init(rawValue:)) ?? .cat
         notchEvents = defaults.bool(forKey: Self.notchEventsKey)
         notchPeek = defaults.bool(forKey: Self.notchPeekKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
@@ -142,6 +150,8 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(enabled.map(\.rawValue), forKey: Self.enabledKey)
         defaults.set(showGraphs, forKey: Self.graphsKey)
         defaults.set(compact, forKey: Self.compactKey)
+        defaults.set(runningCat, forKey: Self.catKey)
+        defaults.set(runner.rawValue, forKey: Self.runnerKey)
         defaults.set(notchEvents, forKey: Self.notchEventsKey)
         defaults.set(notchPeek, forKey: Self.notchPeekKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)

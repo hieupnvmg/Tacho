@@ -77,6 +77,7 @@ Giao diện sáng và tối theo macOS.
 - **Lịch sử 24 giờ** — xem lại CPU, nhiệt độ, bộ nhớ, mạng, pin trong 1 giờ hoặc cả ngày qua
 - **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
 - **Tai thỏ biết nói** — cắm sạc, kết nối AirPods, mất mạng, vào cuộc gọi Teams thì tai thỏ giãn ra báo; rê chuột vào tai thỏ để điều khiển nhạc (YouTube, Spotify, Nhạc…), chọn loa hoặc tai nghe, xem cuộc gọi đang diễn ra
+- **Hình chạy theo CPU** — mèo, chó, cà phê, động cơ… chạy trên menu bar, CPU càng bận càng chạy nhanh. Hình từ [RunCat Neo](https://github.com/runcat-dev/RunCatNeo) (Apache 2.0)
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
 - **Nhẹ** — bản tải về khoảng 3 MB, không chạy animation thừa
 - **Riêng tư** — mọi số liệu đọc ngay trên máy; chỉ gọi mạng để kiểm tra Internet và bản cập nhật,

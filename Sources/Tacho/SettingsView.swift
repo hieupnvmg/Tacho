@@ -55,6 +55,27 @@ struct SettingsView: View {
                 }
                 Toggle(L("Vẽ đồ thị trong mục menu bar"), isOn: $settings.showGraphs)
                 VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Hình chạy theo CPU"), isOn: $settings.runningCat)
+                    Text(L("Một hình động trên menu bar, CPU càng bận thì chạy càng nhanh. Bấm vào để mở bảng CPU. Hình từ RunCat Neo (Apache 2.0)."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                if settings.runningCat {
+                    Picker(L("Hình chạy"), selection: $settings.runner) {
+                        ForEach(Runner.allCases) { runner in
+                            // Each option shows its runner, as a still frame.
+                            Label {
+                                Text(runner.title)
+                            } icon: {
+                                if let frame = runner.frames.first {
+                                    Image(nsImage: frame)
+                                }
+                            }
+                            .tag(runner)
+                        }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Kiểm tra kết nối Internet"), isOn: $settings.checkConnectivity)
                     Text(L("Gọi 1.1.1.1 của Cloudflare mỗi 60 giây để biết có Internet và lấy IP ra Internet."))
                         .font(.system(size: 10))
