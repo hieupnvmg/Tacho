@@ -12,6 +12,7 @@ struct SettingsView: View {
     @StateObject private var runnerImport = RunnerImportModel()
     @ObservedObject private var runners = RunnerLibrary.shared
     @ObservedObject private var meetings = MeetingWatcher.shared
+    @ObservedObject private var ai = AIUsageWatcher.shared
 
     var body: some View {
         Form {
@@ -132,6 +133,32 @@ struct SettingsView: View {
                     Text(L("Vuốt ngang trên bảng tai thỏ để xem 20 mục copy gần nhất, bấm để copy lại. Chỉ giữ trong bộ nhớ, bỏ qua mật khẩu từ trình quản lý mật khẩu."))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(L("Hạn mức Claude Code và Codex trong tai thỏ"), isOn: $settings.notchAI)
+                    Text(L("Một trang trong bảng tai thỏ: % hạn mức 5 giờ và 7 ngày, giờ reset, token đã dùng hôm nay; tai thỏ báo khi vượt 80% và 95%. Codex đọc thẳng từ nhật ký phiên. Hạn mức của Claude Code chỉ có khi Tacho làm statusLine của Claude Code."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                    if settings.notchAI {
+                        switch ai.hookup {
+                        case .none:
+                            Button(L("Kết nối Claude Code")) { ai.connectClaude() }
+                                .help(L("Thêm Tacho làm statusLine trong ~/.claude/settings.json (có sao lưu)."))
+                        case .tacho:
+                            HStack {
+                                Label(L("Đã kết nối Claude Code"), systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(Palette.memory)
+                                    .font(.system(size: 11))
+                                Button(L("Gỡ")) { ai.disconnectClaude() }
+                                    .buttonStyle(.link)
+                                    .font(.system(size: 11))
+                            }
+                        case .other:
+                            Text(L("Claude Code đã có statusLine khác; Tacho không thay nó."))
+                                .font(.system(size: 10))
+                                .foregroundStyle(Palette.warning)
+                        }
+                    }
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Nhắc cuộc họp từ Lịch"), isOn: $settings.notchMeetings)

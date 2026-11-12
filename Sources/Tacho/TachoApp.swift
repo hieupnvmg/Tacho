@@ -60,6 +60,23 @@ struct TachoApp: App {
     @StateObject private var history = AppEnvironment.history
 
     init() {
+        // Claude Code runs this after every response; it must answer fast
+        // and touch nothing else.
+        if CommandLine.arguments.contains(ClaudeStatusLine.flag) {
+            ClaudeStatusLine.run()
+            exit(0)
+        }
+        // What the notch's AI page would show, for checking the readers.
+        if CommandLine.arguments.contains("--ai-usage") {
+            for (name, usage) in [("Codex", CodexReader().read()), ("Claude Code", ClaudeReader().read())] {
+                let windows = usage.windows.map { window in
+                    "\(window.label) \(window.usedPercent)% reset \(window.resetsAt.map { "\($0)" } ?? "-")"
+                }
+                print("\(name): tokens today \(usage.tokensToday) cached \(usage.cachedToday) "
+                      + "model \(usage.model ?? "-") windows [\(windows.joined(separator: ", "))]")
+            }
+            exit(0)
+        }
         SettingsMigration.run()
         let arguments = CommandLine.arguments
         if arguments.contains("--dump") {

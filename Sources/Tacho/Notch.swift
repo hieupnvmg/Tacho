@@ -101,6 +101,10 @@ enum NotchEvent: Hashable {
     }
 }
 
+enum NotchPage: Hashable {
+    case main, clipboard, ai
+}
+
 @MainActor
 final class NotchModel: ObservableObject {
     enum Mode: Equatable {
@@ -131,9 +135,11 @@ final class NotchModel: ObservableObject {
     @Published var hasCall = false
     @Published var hasMeeting = false
     @Published var hasAlert = false
-    /// The panel has a second page, the clipboard, swiped to sideways.
-    @Published var hasPages = false
-    @Published var page = 0
+    /// The panel's pages, side by side, swiped between: the main one, and
+    /// the clipboard and AI usage when they are turned on.
+    @Published var pages: [NotchPage] = [.main]
+    @Published var page: NotchPage = .main
+    var hasPages: Bool { pages.count > 1 }
     /// Music, outputs, and the shelf.
     private static let bodyHeight: CGFloat = 190
     private static let rowHeight: CGFloat = 60
@@ -252,6 +258,7 @@ struct NotchParts {
     let shelf: NotchShelf
     let keepAwake: KeepAwake
     let clipboard: ClipboardHistory
+    let ai: AIUsageWatcher
 }
 
 struct NotchView: View {
@@ -421,26 +428,39 @@ private struct NotchPeek: View {
             }
             .frame(height: notch.height)
 
-            ZStack(alignment: .top) {
-                if model.page == 0 {
-                    mainPage
-                        .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity),
-                                                removal: .move(edge: .leading).combined(with: .opacity)))
-                } else {
-                    ClipboardPage(clipboard: parts.clipboard)
-                        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity),
-                                                removal: .move(edge: .trailing).combined(with: .opacity)))
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .clipped()
+            pager
             if model.hasPages {
-                PageDots(page: $model.page)
+                PageDots(pages: model.pages, page: $model.page)
                     .frame(height: NotchModel.dotsHeight - 8)
             }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, model.hasPages ? 6 : 0)
+    }
+
+    /// Every page side by side, slid along to the current one.
+    private var pager: some View {
+        let width = model.peekInnerWidth - 24
+        let gap: CGFloat = 24
+        let index = CGFloat(model.pages.firstIndex(of: model.page) ?? 0)
+        return HStack(alignment: .top, spacing: gap) {
+            ForEach(model.pages, id: \.self) { page in
+                Group {
+                    switch page {
+                    case .main: mainPage
+                    case .clipboard: ClipboardPage(clipboard: parts.clipboard)
+                    case .ai: AIUsagePage(watcher: parts.ai)
+                    }
+                }
+                .frame(width: width, alignment: .top)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .opacity(page == model.page ? 1 : 0.3)
+            }
+        }
+        .offset(x: -index * (width + gap))
+        .frame(width: width, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .clipped()
     }
 
     private var mainPage: some View {
@@ -940,11 +960,12 @@ private struct SharingMarks: View {
 
 /// Which page the panel shows, and a click to change it.
 private struct PageDots: View {
-    @Binding var page: Int
+    let pages: [NotchPage]
+    @Binding var page: NotchPage
 
     var body: some View {
         HStack(spacing: 6) {
-            ForEach(0..<2, id: \.self) { index in
+            ForEach(pages, id: \.self) { index in
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { page = index }
                 } label: {
@@ -1127,6 +1148,167 @@ private struct ClipboardRow: View {
     }
 }
 
+/// The third page: how much of Claude Code's and Codex's plans is used,
+/// and today's tokens.
+private struct AIUsagePage: View {
+    @ObservedObject var watcher: AIUsageWatcher
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("Trợ lý AI"))
+                .textCase(.uppercase)
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundStyle(.white.opacity(0.4))
+                .padding(.horizontal, 2)
+            if watcher.claude == nil && watcher.codex == nil {
+                Text(L("Chưa thấy Claude Code hay Codex trên máy này."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HStack(alignment: .top, spacing: 8) {
+                    if let claude = watcher.claude {
+                        AssistantCard(name: "Claude Code", symbol: "sparkle", usage: claude,
+                                      missing: claudeMissing)
+                    }
+                    if let codex = watcher.codex {
+                        AssistantCard(name: "Codex", symbol: "chevron.left.forwardslash.chevron.right",
+                                      usage: codex, missing: L("Hạn mức hiện sau lượt Codex tiếp theo."))
+                    }
+                }
+            }
+        }
+        .onAppear { watcher.refresh() }
+    }
+
+    /// Why Claude Code's limits are not shown, if they are not.
+    private var claudeMissing: String {
+        switch watcher.hookup {
+        case .none: return L("Bật Kết nối Claude Code trong Cài đặt để xem hạn mức.")
+        case .tacho: return L("Hạn mức cập nhật mỗi khi bạn dùng claude trong terminal.")
+        case .other: return L("Claude Code đang dùng statusLine khác, nên chưa có hạn mức.")
+        }
+    }
+}
+
+private struct AssistantCard: View {
+    let name: String
+    let symbol: String
+    let usage: AssistantUsage
+    let missing: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Palette.warning)
+                Text(name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if !usage.windows.isEmpty, let updated = usage.windowsUpdated,
+                   Date().timeIntervalSince(updated) > 600 {
+                    Text(ClipboardRow.ago(updated, now: Date()))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .lineLimit(1)
+                        .help(L("Lần cập nhật hạn mức gần nhất"))
+                }
+            }
+            if usage.windows.isEmpty {
+                Text(missing)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                ForEach(usage.windows) { window in
+                    WindowBar(window: window)
+                }
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                Text(Self.tokens(usage.tokensToday))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.9))
+                Text(L("token hôm nay"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .help(L("Không tính %@ token đọc lại từ cache", Self.tokens(usage.cachedToday)))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.07)))
+    }
+
+    /// "1.2M", "295K".
+    static func tokens(_ count: Int) -> String {
+        switch count {
+        case 1_000_000...: return String(format: "%.1fM", Double(count) / 1_000_000)
+        case 1_000...: return String(format: "%.0fK", Double(count) / 1_000)
+        default: return "\(count)"
+        }
+    }
+}
+
+/// One limit window: how full, and when it empties.
+private struct WindowBar: View {
+    let window: LimitWindow
+
+    /// The window has started over since it was read, so the number is old.
+    private var hasReset: Bool { window.resetsAt.map { $0 < Date() } ?? false }
+
+    private var tint: Color {
+        if hasReset { return .white.opacity(0.35) }
+        switch window.usedPercent {
+        case 95...: return Palette.critical
+        case 80...: return Palette.warning
+        default: return Palette.cpu
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 4) {
+                Text(window.label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6))
+                if let reset = window.resetsAt, !hasReset {
+                    Text("· " + L("Reset %@", Self.when(reset)))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 2)
+                Text(hasReset ? L("Đã reset") : String(format: "%.0f%%", window.usedPercent))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(tint)
+            }
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.1))
+                    Capsule().fill(tint)
+                        .frame(width: hasReset ? 0 : geometry.size.width * min(max(window.usedPercent / 100, 0), 1))
+                }
+            }
+            .frame(height: 5)
+        }
+    }
+
+    /// "14:30" today, "Fri 03:00" later in the week.
+    static func when(_ date: Date) -> String {
+        let format = DateFormatter()
+        format.locale = Locale(identifier: L10n.current.rawValue)
+        format.setLocalizedDateFormatFromTemplate(Calendar.current.isDateInToday(date) ? "jmm" : "EEEjmm")
+        return format.string(from: date)
+    }
+}
+
 // MARK: - Controller
 
 /// AppKit keeps windows clear of the menu bar on some Macs (seen on a
@@ -1209,6 +1391,11 @@ final class NotchController {
     private let shelf = NotchShelf()
     private let keepAwake = KeepAwake()
     private let clipboard = ClipboardHistory()
+    private let ai = AIUsageWatcher.shared
+    private var clipboardOn = false
+    private var aiOn = false
+    /// AI limit warnings already shown, by assistant, window, level and reset.
+    private var aiWarned: Set<String> = []
     private var sharing = false
     /// Holds the sharing glow on for `--notch-demo`, with no real call.
     private var demoSharing = false
@@ -1274,9 +1461,21 @@ final class NotchController {
             .sink { [weak self] on in
                 guard let self else { return }
                 if on { self.clipboard.start() } else { self.clipboard.stop() }
-                self.model.hasPages = on
-                if !on { self.model.page = 0 }
+                self.clipboardOn = on
+                self.updatePages()
             }
+            .store(in: &cancellables)
+        settings.$notchAI
+            .sink { [weak self] on in
+                guard let self else { return }
+                if on { self.ai.start() } else { self.ai.stop() }
+                self.aiOn = on
+                self.updatePages()
+            }
+            .store(in: &cancellables)
+        ai.$codex.combineLatest(ai.$claude)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] codex, claude in self?.checkAILimits(codex: codex, claude: claude) }
             .store(in: &cancellables)
         store.onEachSample { [weak self] in self?.checkStore() }
     }
@@ -1360,7 +1559,7 @@ final class NotchController {
         panel.ignoresMouseEvents = true
         panel.isReleasedWhenClosed = false
         let parts = NotchParts(store: store, media: media, resources: resources, meetings: meetings,
-                               shelf: shelf, keepAwake: keepAwake, clipboard: clipboard)
+                               shelf: shelf, keepAwake: keepAwake, clipboard: clipboard, ai: ai)
         let host = NSHostingView(rootView: NotchView(model: model, parts: parts, reduceMotion: reduceMotion) {
             [weak self] in
             self?.collapse()
@@ -1544,9 +1743,34 @@ final class NotchController {
 
     /// The clipboard page's search can be typed in; the other page never
     /// takes the keyboard from the app in front.
-    private func updateKeyAllowance(page: Int) {
-        (panel as? NotchPanel)?.allowsKey = page == 1
-        if page != 1 { releaseKeyboard() }
+    private func updateKeyAllowance(page: NotchPage) {
+        (panel as? NotchPanel)?.allowsKey = page == .clipboard
+        if page != .clipboard { releaseKeyboard() }
+    }
+
+    private func updatePages() {
+        var pages: [NotchPage] = [.main]
+        if clipboardOn { pages.append(.clipboard) }
+        if aiOn { pages.append(.ai) }
+        model.pages = pages
+        if !pages.contains(model.page) { model.page = .main }
+    }
+
+    /// Says so once when an assistant's window passes 80% and again at 95%,
+    /// per reset, so a window that resets can warn again.
+    private func checkAILimits(codex: AssistantUsage?, claude: AssistantUsage?) {
+        guard eventsOn, aiOn else { return }
+        for (name, usage) in [("Codex", codex), ("Claude", claude)] {
+            for window in usage?.windows ?? [] {
+                guard let level = [95.0, 80.0].first(where: { window.usedPercent >= $0 }) else { continue }
+                let key = "\(name)|\(window.label)|\(Int(level))|\(window.resetsAt?.timeIntervalSince1970 ?? 0)"
+                guard aiWarned.insert(key).inserted else { continue }
+                // Crossing 95% also counts as having passed 80%.
+                aiWarned.insert("\(name)|\(window.label)|80|\(window.resetsAt?.timeIntervalSince1970 ?? 0)")
+                show(.resource(symbol: "gauge.with.dots.needle.67percent",
+                               text: "\(name) \(window.label) \(Int(window.usedPercent))%", critical: level >= 95))
+            }
+        }
     }
 
     private func releaseKeyboard() {
@@ -1559,6 +1783,8 @@ final class NotchController {
     /// Whether the panel takes this scroll as a page swipe.
     private func takesSwipe(_ event: NSEvent) -> Bool {
         guard model.mode == .peek, model.hasPages, event.window === panel else { return false }
+        let pages = model.pages
+        let index = pages.firstIndex(of: model.page) ?? 0
         if event.phase == .began || event.phase == .mayBegin { swipe = 0; swipeDone = false }
         let sideways = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
         guard sideways || swipe != 0 else { return false }
@@ -1567,7 +1793,8 @@ final class NotchController {
             if abs(swipe) > 40 {
                 swipeDone = true
                 // Content follows the fingers: swiping left brings the next page.
-                let target = swipe < 0 ? 1 : 0
+                let next = min(max(index + (swipe < 0 ? 1 : -1), 0), pages.count - 1)
+                let target = pages[next]
                 if target != model.page {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { model.page = target }
                     NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
@@ -1671,8 +1898,9 @@ final class NotchController {
             (17, { self.show(.meetingSoon(minutes: 5)) }),
             (21, { self.demoSharing = true; self.sharing = true; self.expand(to: .sharing) }),
             (25, { self.demoPinned = true; self.openPeek() }),
-            (29, { self.clipboard.addSamples(); withAnimation { self.model.page = 1 } }),
-            (32, { withAnimation { self.model.page = 0 } }),
+            (29, { self.clipboard.addSamples(); withAnimation { self.model.page = .clipboard } }),
+            (31, { if self.model.pages.contains(.ai) { withAnimation { self.model.page = .ai } } }),
+            (33, { withAnimation { self.model.page = .main } }),
             (34, { self.demoPinned = false; self.demoSharing = false; self.sharing = false; self.collapse() }),
         ]
         for (delay, step) in steps {

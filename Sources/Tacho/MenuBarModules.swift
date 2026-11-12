@@ -67,6 +67,8 @@ final class MenuBarSettings: ObservableObject {
     @Published var notchMeetings: Bool { didSet { persist() } }
     /// A second page in the notch panel with what was copied lately.
     @Published var notchClipboard: Bool { didSet { persist() } }
+    /// A page in the notch panel with Claude Code's and Codex's usage.
+    @Published var notchAI: Bool { didSet { persist() } }
     /// Controls the only outbound request the app makes. Off means the app
     /// talks to nothing outside this machine.
     @Published var checkConnectivity: Bool { didSet { persist() } }
@@ -92,6 +94,7 @@ final class MenuBarSettings: ObservableObject {
     private static let notchPeekKey = "notch.peek"
     private static let notchMeetingsKey = "notch.meetings"
     private static let notchClipboardKey = "notch.clipboard"
+    private static let notchAIKey = "notch.ai"
     private static let dockKey = "menubar.hideDockIcon"
     private static let probeKey = "network.checkConnectivity"
     /// Every module this install has already seen, so later additions can be
@@ -124,6 +127,7 @@ final class MenuBarSettings: ObservableObject {
         notchPeek = defaults.bool(forKey: Self.notchPeekKey)
         notchMeetings = defaults.bool(forKey: Self.notchMeetingsKey)
         notchClipboard = defaults.bool(forKey: Self.notchClipboardKey)
+        notchAI = defaults.bool(forKey: Self.notchAIKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
         checkConnectivity = defaults.object(forKey: Self.probeKey) as? Bool ?? true
         language = L10n.current
@@ -164,6 +168,7 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(notchPeek, forKey: Self.notchPeekKey)
         defaults.set(notchMeetings, forKey: Self.notchMeetingsKey)
         defaults.set(notchClipboard, forKey: Self.notchClipboardKey)
+        defaults.set(notchAI, forKey: Self.notchAIKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)
         defaults.set(checkConnectivity, forKey: Self.probeKey)
         defaults.set(language.rawValue, forKey: L10n.defaultsKey)

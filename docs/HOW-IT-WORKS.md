@@ -297,6 +297,21 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
     có kiểu `org.nspasteboard.ConcealedType` / `TransientType` của trình quản lý mật khẩu. Tìm kiếm
     không phân biệt hoa thường và dấu. Chỉ ở trang này bảng mới nhận bàn phím (như Spotlight, không
     đưa Tacho lên trước).
+  - **Trang AI** (`AIUsage.swift`, công tắc riêng): hạn mức 5 giờ và 7 ngày, giờ reset và token hôm
+    nay của Claude Code và Codex; tai thỏ báo khi một hạn mức vượt 80% và 95%, mỗi mức một lần mỗi chu
+    kỳ. Đọc mỗi phút ở luồng nền, mỗi file nhật ký chỉ đọc phần mới ghi thêm (`JSONLTail`), lọc dòng bằng
+    chuỗi trước khi parse JSON.
+    - Codex: sự kiện `token_count` trong `~/.codex/sessions/**/*.jsonl` có cả token mỗi lượt lẫn
+      `rate_limits` (primary/secondary, `used_percent`, `window_minutes`, `resets_at`).
+    - Claude Code: token từ `~/.claude/projects/**/*.jsonl`. Mỗi câu trả lời bị ghi nhiều dòng khi
+      stream, nên gộp theo `message.id`. Không tính token đọc lại từ cache (rê chuột để xem). Hạn mức
+      không nằm trong nhật ký (chỉ có `quotaLimits` khi đã bị chặn); Claude Code chỉ đưa nó cho lệnh
+      statusLine. Nút "Kết nối Claude Code" thêm `Tacho --claude-statusline` làm statusLine trong
+      `~/.claude/settings.json` (sao lưu thành `settings.json.tacho-backup`, không thay statusLine có
+      sẵn); lệnh đó ghi `~/.claude/tacho-usage.json` và in một dòng trạng thái. StatusLine chỉ chạy ở
+      `claude` trong terminal, không chạy trong app Claude desktop, nên số hạn mức Claude có thể cũ:
+      thẻ ghi tuổi của số, và hạn mức đã qua giờ reset hiện "Reset".
+    - `Tacho --ai-usage` in những gì hai bộ đọc thấy, để đối chiếu.
 
 Cách làm:
 
