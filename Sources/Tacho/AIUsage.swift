@@ -30,6 +30,15 @@ struct AssistantUsage: Equatable {
     var model: String?
 }
 
+/// The home folder as the assistants see it: `HOME` if set, as Claude Code
+/// and Codex use, otherwise the account's own.
+let userHome: URL = {
+    if let home = ProcessInfo.processInfo.environment["HOME"], !home.isEmpty {
+        return URL(fileURLWithPath: home, isDirectory: true)
+    }
+    return FileManager.default.homeDirectoryForCurrentUser
+}()
+
 // MARK: - Reading growing JSONL files
 
 /// Reads the lines appended to a set of JSONL files since the last call,
@@ -95,7 +104,7 @@ private func recentFiles(under root: URL, matching suffix: String) -> [URL] {
 /// plans, the account's rate-limit windows.
 final class CodexReader {
     private let tail = JSONLTail()
-    private let root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions")
+    private let root = userHome.appendingPathComponent(".codex/sessions")
     private var usage = AssistantUsage()
     private var day = Calendar.current.startOfDay(for: Date())
 
@@ -122,21 +131,60 @@ final class CodexReader {
                 usage.tokensToday += max(input - cached, 0) + output
                 usage.cachedToday += cached
             }
-            if let limits = payload["rate_limits"] as? [String: Any] {
-                let windows = ["primary", "secondary"].compactMap { key -> LimitWindow? in
-                    guard let window = limits[key] as? [String: Any],
-                          let used = window["used_percent"] as? Double,
-                          let minutes = window["window_minutes"] as? Int else { return nil }
-                    let reset = (window["resets_at"] as? Double).map { Date(timeIntervalSince1970: $0) }
-                    return LimitWindow(label: LimitWindow.label(minutes: minutes), usedPercent: used, resetsAt: reset)
-                }
+            if let windows = Self.windows(payload["rate_limits"]) {
                 if !windows.isEmpty, (when ?? .distantPast) >= (usage.windowsUpdated ?? .distantPast) {
                     usage.windows = windows
                     usage.windowsUpdated = when
                 }
             }
         }
+        if usage.windows.isEmpty, !lookedBack {
+            lookedBack = true
+            lookBack()
+        }
         return usage
+    }
+
+    private var lookedBack = false
+
+    /// Nothing in the last two days' sessions: the newest older session that
+    /// reported limits, read from its end, so the card still shows them (or
+    /// that they have reset since).
+    private func lookBack() {
+        guard let walker = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.contentModificationDateKey],
+                                                          options: [.skipsHiddenFiles]) else { return }
+        var files: [(URL, Date)] = []
+        for case let url as URL in walker where url.pathExtension == "jsonl" {
+            if let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate {
+                files.append((url, date))
+            }
+        }
+        for (file, _) in files.sorted(by: { $0.1 > $1.1 }).prefix(30) {
+            guard let handle = try? FileHandle(forReadingFrom: file) else { continue }
+            defer { try? handle.close() }
+            let size = (try? handle.seekToEnd()) ?? 0
+            try? handle.seek(toOffset: size > 1_000_000 ? size - 1_000_000 : 0)
+            guard let data = try? handle.readToEnd() else { continue }
+            for line in data.split(separator: 0x0A).reversed() where line.range(of: Data("\"rate_limits\"".utf8)) != nil {
+                guard let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                      let payload = object["payload"] as? [String: Any],
+                      let windows = Self.windows(payload["rate_limits"]), !windows.isEmpty else { continue }
+                usage.windows = windows
+                usage.windowsUpdated = date(object["timestamp"])
+                return
+            }
+        }
+    }
+
+    static func windows(_ value: Any?) -> [LimitWindow]? {
+        guard let limits = value as? [String: Any] else { return nil }
+        return ["primary", "secondary"].compactMap { key -> LimitWindow? in
+            guard let window = limits[key] as? [String: Any],
+                  let used = window["used_percent"] as? Double,
+                  let minutes = window["window_minutes"] as? Int else { return nil }
+            let reset = (window["resets_at"] as? Double).map { Date(timeIntervalSince1970: $0) }
+            return LimitWindow(label: LimitWindow.label(minutes: minutes), usedPercent: used, resetsAt: reset)
+        }
     }
 }
 
@@ -148,7 +196,7 @@ final class CodexReader {
 /// hands them to a statusLine command, which `ClaudeStatusLine` provides.
 final class ClaudeReader {
     private let tail = JSONLTail()
-    private let home = FileManager.default.homeDirectoryForCurrentUser
+    private let home = userHome
     private var root: URL { home.appendingPathComponent(".claude/projects") }
     /// Today's responses by message id: the largest count seen for each.
     private var responses: [String: (fresh: Int, cached: Int)] = [:]
@@ -199,11 +247,22 @@ enum ClaudeStatusLine {
     static let flag = "--claude-statusline"
 
     static var snapshotURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/tacho-usage.json")
+        userHome.appendingPathComponent(".claude/tacho-usage.json")
     }
 
     static var settingsURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
+        userHome.appendingPathComponent(".claude/settings.json")
+    }
+
+    /// The statusLine that was there before Tacho, which Tacho runs in turn
+    /// and shows instead of its own line, and puts back when removed.
+    static var previousURL: URL {
+        userHome.appendingPathComponent(".claude/tacho-statusline-previous.json")
+    }
+
+    static var previous: [String: Any]? {
+        guard let data = try? Data(contentsOf: previousURL) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 
     /// The command Claude Code runs: this copy of Tacho.
@@ -240,7 +299,40 @@ enum ClaudeStatusLine {
                 try? data.write(to: snapshotURL, options: .atomic)
             }
         }
-        print(parts.joined(separator: " · "))
+        // With a statusLine of its own from before, the terminal keeps
+        // showing that one; Tacho only takes the limits.
+        if let previous = (previous?["command"] as? String), let line = runPrevious(previous, input: input) {
+            print(line, terminator: line.hasSuffix("\n") ? "" : "\n")
+        } else {
+            print(parts.joined(separator: " · "))
+        }
+    }
+
+    /// Runs the earlier statusLine with the same input, for up to 5 seconds.
+    private static func runPrevious(_ command: String, input: Data) -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", command]
+        let stdin = Pipe(), stdout = Pipe()
+        process.standardInput = stdin
+        process.standardOutput = stdout
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        stdin.fileHandleForWriting.write(input)
+        try? stdin.fileHandleForWriting.close()
+        let done = DispatchSemaphore(value: 0)
+        var output = Data()
+        DispatchQueue.global().async {
+            output = stdout.fileHandleForReading.readDataToEndOfFile()
+            done.signal()
+        }
+        if done.wait(timeout: .now() + 5) == .timedOut {
+            process.terminate()
+            return nil
+        }
+        process.waitUntilExit()
+        let text = String(decoding: output, as: UTF8.self)
+        return text.isEmpty ? nil : text
     }
 
     static func readSnapshot() -> (windows: [LimitWindow], updated: Date?, model: String?)? {
@@ -273,18 +365,26 @@ enum ClaudeStatusLine {
     }
 
     /// Adds Tacho as Claude Code's statusLine, keeping every other setting.
-    /// Also repoints it when Tacho has moved. Never replaces another
-    /// statusLine.
+    /// Also repoints it when Tacho has moved. Another statusLine is only
+    /// replaced with `keepingExisting`, and then kept: saved aside, run by
+    /// Tacho each time, and put back by `uninstall`.
     @discardableResult
-    static func install() -> Bool {
+    static func install(keepingExisting: Bool = false) -> Bool {
         var settings: [String: Any] = [:]
         if let data = try? Data(contentsOf: settingsURL) {
             guard let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
             settings = parsed
         }
-        if let line = settings["statusLine"] as? [String: Any],
-           (line["command"] as? String)?.contains(flag) != true {
-            return false
+        var line: [String: Any] = ["type": "command"]
+        if let existing = settings["statusLine"] as? [String: Any],
+           (existing["command"] as? String)?.contains(flag) != true {
+            guard keepingExisting,
+                  let saved = try? JSONSerialization.data(withJSONObject: existing),
+                  (try? saved.write(to: previousURL, options: .atomic)) != nil else { return false }
+            // Its other options (padding and so on) carry over.
+            line = existing
+        } else if let existing = settings["statusLine"] as? [String: Any] {
+            line = existing
         }
         // A copy of the settings as they were, in case anything goes wrong.
         if FileManager.default.fileExists(atPath: settingsURL.path) {
@@ -292,7 +392,9 @@ enum ClaudeStatusLine {
             try? FileManager.default.removeItem(at: backup)
             try? FileManager.default.copyItem(at: settingsURL, to: backup)
         }
-        settings["statusLine"] = ["type": "command", "command": command]
+        line["type"] = "command"
+        line["command"] = command
+        settings["statusLine"] = line
         guard let data = try? JSONSerialization.data(withJSONObject: settings,
                                                      options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
         else { return false }
@@ -305,7 +407,12 @@ enum ClaudeStatusLine {
     static func uninstall() {
         guard hookup == .tacho, let data = try? Data(contentsOf: settingsURL),
               var settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        settings.removeValue(forKey: "statusLine")
+        if let previous {
+            settings["statusLine"] = previous
+        } else {
+            settings.removeValue(forKey: "statusLine")
+        }
+        try? FileManager.default.removeItem(at: previousURL)
         if let data = try? JSONSerialization.data(withJSONObject: settings,
                                                   options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]) {
             try? data.write(to: settingsURL, options: .atomic)
@@ -363,10 +470,13 @@ final class AIUsageWatcher: ObservableObject {
         }
     }
 
-    func connectClaude() {
-        ClaudeStatusLine.install()
+    func connectClaude(keepingExisting: Bool = false) {
+        ClaudeStatusLine.install(keepingExisting: keepingExisting)
         hookup = ClaudeStatusLine.hookup
     }
+
+    /// Tacho runs a statusLine that was there before it.
+    var keepsPreviousStatusLine: Bool { ClaudeStatusLine.previous != nil }
 
     func disconnectClaude() {
         ClaudeStatusLine.uninstall()

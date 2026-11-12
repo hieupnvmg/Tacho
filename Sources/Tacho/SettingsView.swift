@@ -130,9 +130,16 @@ struct SettingsView: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Lịch sử clipboard trong tai thỏ"), isOn: $settings.notchClipboard)
-                    Text(L("Vuốt ngang trên bảng tai thỏ để xem 20 mục copy gần nhất, bấm để copy lại. Chỉ giữ trong bộ nhớ, bỏ qua mật khẩu từ trình quản lý mật khẩu."))
+                    Text(L("Vuốt ngang trên bảng tai thỏ để xem 20 mục copy gần nhất, bấm để copy lại. Bỏ qua mật khẩu từ trình quản lý mật khẩu."))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
+                    if settings.notchClipboard {
+                        Toggle(L("Giữ lịch sử khi Tacho khởi động lại"), isOn: $settings.notchClipboardKeep)
+                            .font(.system(size: 11))
+                        Text(L("Lưu trên máy này (không mã hoá, chỉ tài khoản của bạn đọc được), tự xoá sau 7 ngày. Tắt đi là xoá phần đã lưu."))
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(L("Hạn mức Claude Code và Codex trong tai thỏ"), isOn: $settings.notchAI)
@@ -153,10 +160,17 @@ struct SettingsView: View {
                                     .buttonStyle(.link)
                                     .font(.system(size: 11))
                             }
+                            if ai.keepsPreviousStatusLine {
+                                Text(L("statusLine cũ của bạn vẫn chạy như trước; gỡ là trả lại nguyên vẹn."))
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                            }
                         case .other:
-                            Text(L("Claude Code đã có statusLine khác; Tacho không thay nó."))
+                            Text(L("Claude Code đã có statusLine khác. Tacho có thể chạy kèm: dòng trạng thái giữ nguyên như cũ, Tacho chỉ lấy hạn mức."))
                                 .font(.system(size: 10))
-                                .foregroundStyle(Palette.warning)
+                                .foregroundStyle(.secondary)
+                            Button(L("Kết nối, giữ statusLine hiện tại")) { ai.connectClaude(keepingExisting: true) }
+                                .help(L("Lưu statusLine hiện tại sang một bên, Tacho chạy nó mỗi lần; bấm Gỡ để trả lại."))
                         }
                     }
                 }
@@ -173,6 +187,16 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.link)
                         .font(.system(size: 10))
+                    }
+                }
+                if settings.notchClipboard || settings.notchAI {
+                    Picker(L("Khi mở tai thỏ, hiện"), selection: $settings.notchStartPage) {
+                        ForEach(NotchPage.allCases.filter { page in
+                            page == .main || (page == .clipboard && settings.notchClipboard)
+                                || (page == .ai && settings.notchAI)
+                        }) { page in
+                            Text(page.title).tag(page)
+                        }
                     }
                 }
                 if NotchGeometry.current() == nil {

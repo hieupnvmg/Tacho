@@ -66,6 +66,17 @@ struct TachoApp: App {
             ClaudeStatusLine.run()
             exit(0)
         }
+        // The same as the Settings buttons, for scripts.
+        if CommandLine.arguments.contains("--claude-connect") {
+            let done = ClaudeStatusLine.install(keepingExisting: true)
+            print(done ? "Connected: \(ClaudeStatusLine.settingsURL.path)" : "Could not connect")
+            exit(done ? 0 : 1)
+        }
+        if CommandLine.arguments.contains("--claude-disconnect") {
+            ClaudeStatusLine.uninstall()
+            print("Disconnected")
+            exit(0)
+        }
         // What the notch's AI page would show, for checking the readers.
         if CommandLine.arguments.contains("--ai-usage") {
             for (name, usage) in [("Codex", CodexReader().read()), ("Claude Code", ClaudeReader().read())] {

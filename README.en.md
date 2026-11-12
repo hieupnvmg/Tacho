@@ -76,7 +76,7 @@ Swipe sideways with two fingers for the other pages:
   </tr>
   <tr>
     <td><b>Clipboard history</b> — the last 20 things you copied, searchable, click to copy again. Kept
-    in memory only, and passwords from password managers are skipped.</td>
+    across restarts (you can turn that off), and passwords from password managers are skipped.</td>
     <td><b>Claude Code and Codex</b> — how much of the 5-hour and 7-day limits is used, when they reset,
     and today's tokens.</td>
   </tr>

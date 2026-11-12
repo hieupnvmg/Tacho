@@ -74,8 +74,8 @@ Vuốt hai ngón sang ngang để sang các trang khác:
     <td width="50%"><img src="docs/images/notch-ai.png" alt="Trang hạn mức Claude Code và Codex"></td>
   </tr>
   <tr>
-    <td><b>Lịch sử clipboard</b> — 20 mục copy gần nhất, tìm không cần dấu, bấm để copy lại. Chỉ giữ
-    trong bộ nhớ, bỏ qua mật khẩu từ trình quản lý mật khẩu.</td>
+    <td><b>Lịch sử clipboard</b> — 20 mục copy gần nhất, tìm không cần dấu, bấm để copy lại. Giữ qua
+    các lần khởi động lại (tắt được), bỏ qua mật khẩu từ trình quản lý mật khẩu.</td>
     <td><b>Claude Code và Codex</b> — % hạn mức 5 giờ và 7 ngày, giờ reset, token đã dùng hôm nay.</td>
   </tr>
 </table>

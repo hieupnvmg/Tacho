@@ -292,9 +292,14 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
   - **Kệ file** (`NotchShelf`): chỉ giữ đường dẫn, file vẫn ở chỗ cũ, tối đa 12. Kéo file khác app
     không gửi sự kiện chuột cho app khác, nên một cửa sổ đen nhỏ nằm đúng chỗ camera (không nhìn thấy)
     đón việc kéo thả và mở bảng; cửa sổ đó cũng nhận việc rê chuột vào tai thỏ.
+  - **Trang mở đầu:** chọn bảng mở ra ở trang chính, clipboard hay AI. Mỗi lần vuốt chỉ sang một trang;
+    cuộn quán tính sau khi nhấc tay (Magic Mouse) không bao giờ lật trang.
   - **Trang clipboard** (`ClipboardHistory`, công tắc riêng): vuốt hai ngón ngang trên bảng để sang.
-    Đọc `changeCount` mỗi 0,75 giây, chỉ đọc nội dung khi nó đổi; giữ 20 mục trong bộ nhớ, bỏ qua mục
-    có kiểu `org.nspasteboard.ConcealedType` / `TransientType` của trình quản lý mật khẩu. Tìm kiếm
+    Đọc `changeCount` mỗi 0,75 giây, chỉ đọc nội dung khi nó đổi; giữ 20 mục, bỏ qua mục có kiểu
+    `org.nspasteboard.ConcealedType` / `TransientType` của trình quản lý mật khẩu. Mặc định lưu cả xuống
+    `~/Library/Application Support/Tacho/Clipboard/` (`history.json` và ảnh PNG, quyền 0700/0600, không
+    mã hoá) một giây sau mỗi thay đổi, nạp lại khi mở app, bỏ mục cũ hơn 7 ngày; tắt "Giữ lịch sử" hoặc
+    tắt clipboard là xoá phần đã lưu. `--notch-demo` không đọc cũng không ghi chỗ này. Tìm kiếm
     không phân biệt hoa thường và dấu. Chỉ ở trang này bảng mới nhận bàn phím (như Spotlight, không
     đưa Tacho lên trước).
   - **Trang AI** (`AIUsage.swift`, công tắc riêng): hạn mức 5 giờ và 7 ngày, giờ reset và token hôm
@@ -302,13 +307,17 @@ lại để số đo dao động quanh ngưỡng không gây ra một loạt th�
     kỳ. Đọc mỗi phút ở luồng nền, mỗi file nhật ký chỉ đọc phần mới ghi thêm (`JSONLTail`), lọc dòng bằng
     chuỗi trước khi parse JSON.
     - Codex: sự kiện `token_count` trong `~/.codex/sessions/**/*.jsonl` có cả token mỗi lượt lẫn
-      `rate_limits` (primary/secondary, `used_percent`, `window_minutes`, `resets_at`).
+      `rate_limits` (primary/secondary, `used_percent`, `window_minutes`, `resets_at`). Đọc các phiên
+      của 2 ngày gần nhất; không thấy hạn mức thì lùi về phiên cũ hơn, đọc từ cuối file.
     - Claude Code: token từ `~/.claude/projects/**/*.jsonl`. Mỗi câu trả lời bị ghi nhiều dòng khi
       stream, nên gộp theo `message.id`. Không tính token đọc lại từ cache (rê chuột để xem). Hạn mức
       không nằm trong nhật ký (chỉ có `quotaLimits` khi đã bị chặn); Claude Code chỉ đưa nó cho lệnh
       statusLine. Nút "Kết nối Claude Code" thêm `Tacho --claude-statusline` làm statusLine trong
-      `~/.claude/settings.json` (sao lưu thành `settings.json.tacho-backup`, không thay statusLine có
-      sẵn); lệnh đó ghi `~/.claude/tacho-usage.json` và in một dòng trạng thái. StatusLine chỉ chạy ở
+      `~/.claude/settings.json` (sao lưu thành `settings.json.tacho-backup`); lệnh đó ghi
+      `~/.claude/tacho-usage.json` và in một dòng trạng thái. Nếu đã có statusLine khác, "Kết nối, giữ
+      statusLine hiện tại" cất nó vào `~/.claude/tacho-statusline-previous.json`; Tacho chạy nó với cùng
+      dữ liệu (tối đa 5 giây) và in đúng kết quả của nó, Gỡ thì trả lại nguyên vẹn. Cũng làm được bằng
+      `Tacho --claude-connect` / `--claude-disconnect`. Thư mục home lấy theo `HOME` như Claude Code. StatusLine chỉ chạy ở
       `claude` trong terminal, không chạy trong app Claude desktop, nên số hạn mức Claude có thể cũ:
       thẻ ghi tuổi của số, và hạn mức đã qua giờ reset hiện "Reset".
     - `Tacho --ai-usage` in những gì hai bộ đọc thấy, để đối chiếu.

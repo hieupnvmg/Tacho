@@ -490,8 +490,10 @@ enum ScreenSharing {
 
 // MARK: - Clipboard
 
-/// What was copied lately, to copy again. Kept in memory only, and never
-/// anything a password manager marks as secret.
+/// What was copied lately, to copy again. Never anything a password manager
+/// marks as secret. Unless turned off, it is also kept on disk so it lasts
+/// past a restart or an update: in Application Support, readable only by
+/// this account, not encrypted, for up to a week.
 @MainActor
 final class ClipboardHistory: ObservableObject {
     struct Item: Identifiable, Equatable {
@@ -501,7 +503,7 @@ final class ClipboardHistory: ObservableObject {
             case files([URL])
         }
 
-        let id = UUID()
+        var id = UUID()
         let content: Content
         let date: Date
         let appName: String?
@@ -512,7 +514,9 @@ final class ClipboardHistory: ObservableObject {
         var icon: NSImage? { appPath.map { NSWorkspace.shared.icon(forFile: $0) } }
     }
 
-    @Published private(set) var items: [Item] = []
+    @Published private(set) var items: [Item] = [] {
+        didSet { scheduleSave() }
+    }
     /// Narrows the list: words in the text, file names, the app's name.
     @Published var query = ""
     /// The item just copied back, for a moment's feedback.
@@ -530,6 +534,7 @@ final class ClipboardHistory: ObservableObject {
 
     func start() {
         guard timer == nil else { return }
+        if persists && items.isEmpty { load() }
         changeCount = NSPasteboard.general.changeCount
         // Reading the change count is one cheap call; the pasteboard is only
         // read when it has changed.
@@ -540,10 +545,131 @@ final class ClipboardHistory: ObservableObject {
         self.timer = timer
     }
 
+    /// Turning the history off forgets it, on disk too.
     func stop() {
         timer?.invalidate()
         timer = nil
         items = []
+        deleteStore()
+    }
+
+    // MARK: Keeping it on disk
+
+    /// Whether the history outlasts Tacho quitting. Turned off, what was
+    /// saved is deleted and the history lives in memory only.
+    var persists = false {
+        didSet {
+            guard persists != oldValue else { return }
+            // On at launch, before anything was copied: load what was saved
+            // rather than overwrite it with an empty list.
+            if persists { if items.isEmpty { load() } else { save() } } else { deleteStore() }
+        }
+    }
+
+    /// `--notch-demo` shows sample entries; they must not land in, or show,
+    /// the real history.
+    private let storageAllowed = !CommandLine.arguments.contains("--notch-demo")
+    static let keepFor: TimeInterval = 7 * 86400
+    /// Images larger than this stay in memory only.
+    private static let largestSavedImage = 5_000_000
+
+    private var store: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Tacho/Clipboard", isDirectory: true)
+    }
+
+    private struct Saved: Codable {
+        var id: UUID
+        var kind: String
+        var text: String?
+        var paths: [String]?
+        var date: Date
+        var appName: String?
+        var appPath: String?
+    }
+
+    private var saveWork: DispatchWorkItem?
+
+    private func scheduleSave() {
+        guard persists, storageAllowed else { return }
+        saveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.save() }
+        saveWork = work
+        // Copying in a burst writes once.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+    }
+
+    private func save() {
+        guard persists, storageAllowed else { return }
+        let manager = FileManager.default
+        try? manager.createDirectory(at: store, withIntermediateDirectories: true,
+                                     attributes: [.posixPermissions: 0o700])
+        var saved: [Saved] = []
+        var images: Set<String> = []
+        for item in items {
+            var entry = Saved(id: item.id, kind: "", date: item.date, appName: item.appName, appPath: item.appPath)
+            switch item.content {
+            case .text(let text):
+                entry.kind = "text"
+                entry.text = text
+            case .files(let urls):
+                entry.kind = "files"
+                entry.paths = urls.map(\.path)
+            case .image(let image):
+                let name = item.id.uuidString + ".png"
+                let file = store.appendingPathComponent(name)
+                if !manager.fileExists(atPath: file.path) {
+                    guard let tiff = image.tiffRepresentation,
+                          let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]),
+                          png.count <= Self.largestSavedImage else { continue }
+                    manager.createFile(atPath: file.path, contents: png, attributes: [.posixPermissions: 0o600])
+                }
+                images.insert(name)
+                entry.kind = "image"
+            }
+            saved.append(entry)
+        }
+        let index = store.appendingPathComponent("history.json")
+        if let data = try? JSONEncoder().encode(saved) {
+            try? data.write(to: index, options: .atomic)
+            try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: index.path)
+        }
+        // Images of entries that are gone.
+        for file in (try? manager.contentsOfDirectory(atPath: store.path)) ?? []
+        where file.hasSuffix(".png") && !images.contains(file) {
+            try? manager.removeItem(at: store.appendingPathComponent(file))
+        }
+    }
+
+    private func load() {
+        guard storageAllowed,
+              let data = try? Data(contentsOf: store.appendingPathComponent("history.json")),
+              let saved = try? JSONDecoder().decode([Saved].self, from: data) else { return }
+        let cutoff = Date().addingTimeInterval(-Self.keepFor)
+        items = saved.filter { $0.date >= cutoff }.compactMap { entry in
+            let content: Item.Content
+            switch entry.kind {
+            case "text":
+                guard let text = entry.text else { return nil }
+                content = .text(text)
+            case "files":
+                guard let paths = entry.paths, !paths.isEmpty else { return nil }
+                content = .files(paths.map { URL(fileURLWithPath: $0) })
+            case "image":
+                guard let image = NSImage(contentsOf: store.appendingPathComponent(entry.id.uuidString + ".png"))
+                else { return nil }
+                content = .image(image)
+            default:
+                return nil
+            }
+            return Item(id: entry.id, content: content, date: entry.date, appName: entry.appName, appPath: entry.appPath)
+        }
+    }
+
+    private func deleteStore() {
+        guard storageAllowed else { return }
+        saveWork?.cancel()
+        try? FileManager.default.removeItem(at: store)
     }
 
     private func poll() {

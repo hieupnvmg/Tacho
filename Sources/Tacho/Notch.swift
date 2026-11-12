@@ -101,8 +101,18 @@ enum NotchEvent: Hashable {
     }
 }
 
-enum NotchPage: Hashable {
+enum NotchPage: String, Hashable, CaseIterable, Identifiable {
     case main, clipboard, ai
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .main: return L("Trang chính")
+        case .clipboard: return L("Clipboard")
+        case .ai: return L("Trợ lý AI")
+        }
+    }
 }
 
 @MainActor
@@ -516,10 +526,16 @@ private struct NotchPeek: View {
         if sample.isPresent {
             HStack(spacing: 6) {
                 if sample.isCharging && sample.timeRemaining > 0 {
-                    Text(L("Đầy sau ") + Fmt.minutes(sample.timeRemaining))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Palette.memory.opacity(0.9))
-                        .lineLimit(1)
+                    // Short, since the space beside a wide notch is narrow.
+                    HStack(spacing: 2) {
+                        Image(systemName: "bolt.fill").font(.system(size: 8, weight: .bold))
+                        Text(Fmt.minutes(sample.timeRemaining))
+                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                    }
+                    .foregroundStyle(Palette.memory.opacity(0.9))
+                    .fixedSize()
+                    .help(L("Đầy sau ") + Fmt.minutes(sample.timeRemaining))
                 }
                 Text(String(format: "%.0f%%", sample.percentage * 100))
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -1187,7 +1203,7 @@ private struct AIUsagePage: View {
         switch watcher.hookup {
         case .none: return L("Bật Kết nối Claude Code trong Cài đặt để xem hạn mức.")
         case .tacho: return L("Hạn mức cập nhật mỗi khi bạn dùng claude trong terminal.")
-        case .other: return L("Claude Code đang dùng statusLine khác, nên chưa có hạn mức.")
+        case .other: return L("Claude Code đang có statusLine khác. Bấm Kết nối, giữ statusLine hiện tại trong Cài đặt.")
         }
     }
 }
@@ -1393,6 +1409,8 @@ final class NotchController {
     private let clipboard = ClipboardHistory()
     private let ai = AIUsageWatcher.shared
     private var clipboardOn = false
+    /// The page the panel opens on, when it is turned on.
+    private var startPage: NotchPage = .main
     private var aiOn = false
     /// AI limit warnings already shown, by assistant, window, level and reset.
     private var aiWarned: Set<String> = []
@@ -1461,6 +1479,13 @@ final class NotchController {
             .store(in: &cancellables)
         model.$page
             .sink { [weak self] page in self?.updateKeyAllowance(page: page) }
+            .store(in: &cancellables)
+        // Before the history starts, so it knows whether to load what was saved.
+        settings.$notchClipboardKeep
+            .sink { [weak self] keep in self?.clipboard.persists = keep }
+            .store(in: &cancellables)
+        settings.$notchStartPage
+            .sink { [weak self] page in self?.startPage = page }
             .store(in: &cancellables)
         settings.$notchClipboard
             .sink { [weak self] on in
@@ -1852,6 +1877,8 @@ final class NotchController {
         model.hasCall = media.call != nil
         model.hasAlert = resources.current != nil
         model.hasMeeting = meetingShows
+        // Each opening starts on the chosen page, whatever was swiped to last.
+        model.page = model.pages.contains(startPage) ? startPage : .main
         media.refreshOutputs()
         media.startPlayback()
         peekTimer?.invalidate()

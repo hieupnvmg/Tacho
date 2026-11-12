@@ -67,6 +67,10 @@ final class MenuBarSettings: ObservableObject {
     @Published var notchMeetings: Bool { didSet { persist() } }
     /// A second page in the notch panel with what was copied lately.
     @Published var notchClipboard: Bool { didSet { persist() } }
+    /// The clipboard history outlasts Tacho quitting, on disk.
+    @Published var notchClipboardKeep: Bool { didSet { persist() } }
+    /// The page the notch panel opens on.
+    @Published var notchStartPage: NotchPage { didSet { persist() } }
     /// A page in the notch panel with Claude Code's and Codex's usage.
     @Published var notchAI: Bool { didSet { persist() } }
     /// Controls the only outbound request the app makes. Off means the app
@@ -94,6 +98,8 @@ final class MenuBarSettings: ObservableObject {
     private static let notchPeekKey = "notch.peek"
     private static let notchMeetingsKey = "notch.meetings"
     private static let notchClipboardKey = "notch.clipboard"
+    private static let notchClipboardKeepKey = "notch.clipboard.keep"
+    private static let notchStartPageKey = "notch.startPage"
     private static let notchAIKey = "notch.ai"
     private static let dockKey = "menubar.hideDockIcon"
     private static let probeKey = "network.checkConnectivity"
@@ -127,6 +133,8 @@ final class MenuBarSettings: ObservableObject {
         notchPeek = defaults.bool(forKey: Self.notchPeekKey)
         notchMeetings = defaults.bool(forKey: Self.notchMeetingsKey)
         notchClipboard = defaults.bool(forKey: Self.notchClipboardKey)
+        notchClipboardKeep = defaults.object(forKey: Self.notchClipboardKeepKey) as? Bool ?? true
+        notchStartPage = defaults.string(forKey: Self.notchStartPageKey).flatMap(NotchPage.init(rawValue:)) ?? .main
         notchAI = defaults.bool(forKey: Self.notchAIKey)
         hideDockIcon = defaults.object(forKey: Self.dockKey) as? Bool ?? false
         checkConnectivity = defaults.object(forKey: Self.probeKey) as? Bool ?? true
@@ -168,6 +176,8 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(notchPeek, forKey: Self.notchPeekKey)
         defaults.set(notchMeetings, forKey: Self.notchMeetingsKey)
         defaults.set(notchClipboard, forKey: Self.notchClipboardKey)
+        defaults.set(notchClipboardKeep, forKey: Self.notchClipboardKeepKey)
+        defaults.set(notchStartPage.rawValue, forKey: Self.notchStartPageKey)
         defaults.set(notchAI, forKey: Self.notchAIKey)
         defaults.set(hideDockIcon, forKey: Self.dockKey)
         defaults.set(checkConnectivity, forKey: Self.probeKey)
