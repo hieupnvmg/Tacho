@@ -1168,9 +1168,23 @@ final class NotchCatcherView: NSView {
                                        owner: self, userInfo: nil))
     }
 
+    /// Rounded at the bottom like the camera housing, and drawn a little
+    /// inside it (see `catcherFrame`), so no square corner shows past the
+    /// hardware's rounded ones.
     override func draw(_ dirtyRect: NSRect) {
+        let radius: CGFloat = 8
+        let path = NSBezierPath()
+        path.move(to: NSPoint(x: bounds.minX, y: bounds.maxY))
+        path.line(to: NSPoint(x: bounds.minX, y: bounds.minY + radius))
+        path.appendArc(withCenter: NSPoint(x: bounds.minX + radius, y: bounds.minY + radius), radius: radius,
+                       startAngle: 180, endAngle: 270)
+        path.line(to: NSPoint(x: bounds.maxX - radius, y: bounds.minY))
+        path.appendArc(withCenter: NSPoint(x: bounds.maxX - radius, y: bounds.minY + radius), radius: radius,
+                       startAngle: 270, endAngle: 360)
+        path.line(to: NSPoint(x: bounds.maxX, y: bounds.maxY))
+        path.close()
         NSColor.black.setFill()
-        bounds.fill()
+        path.fill()
     }
 
     override func mouseEntered(with event: NSEvent) { onPointer?() }
@@ -1302,20 +1316,25 @@ final class NotchController {
         catcher?.orderOut(nil)
         catcher = nil
         guard peekOn, let geometry else { return }
-        let panel = NotchPanel(contentRect: geometry.rect, styleMask: [.borderless, .nonactivatingPanel],
+        // Inside the housing on every side but the top, the same margin the
+        // idle shape keeps, so it stays hidden behind the hardware.
+        var frame = geometry.rect.insetBy(dx: 6, dy: 0)
+        frame.origin.y += 3
+        frame.size.height -= 3
+        let panel = NotchPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
                                backing: .buffered, defer: false)
-        panel.isOpaque = true
-        panel.backgroundColor = .black
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         panel.hasShadow = false
         // Just under the notch panel, so the panel takes over once open.
         panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 2)
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         panel.isReleasedWhenClosed = false
-        let view = NotchCatcherView(frame: CGRect(origin: .zero, size: geometry.rect.size))
+        let view = NotchCatcherView(frame: CGRect(origin: .zero, size: frame.size))
         view.onPointer = { [weak self] in self?.pointerMoved() }
         view.onDrag = { [weak self] in self?.filesDragged() }
         panel.contentView = view
-        panel.setFrame(geometry.rect, display: false)
+        panel.setFrame(frame, display: false)
         panel.orderFrontRegardless()
         catcher = panel
     }
