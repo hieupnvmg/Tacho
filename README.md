@@ -9,8 +9,8 @@
 <h1 align="center">Tacho</h1>
 
 <p align="center">
-  <b>Đồng hồ đo cho chiếc Mac của bạn — ngay trên menu bar.</b><br>
-  CPU, nhiệt độ, quạt, GPU, bộ nhớ, ổ đĩa, mạng và pin, nhìn một cái là biết máy đang ra sao.
+  <b>Đồng hồ đo cho chiếc Mac của bạn — ngay trên menu bar và ở tai thỏ.</b><br>
+  CPU, nhiệt độ, quạt, GPU, bộ nhớ, ổ đĩa, mạng, pin — và cả hạn mức Claude Code, Codex.
 </p>
 
 <p align="center">
@@ -18,11 +18,15 @@
   &nbsp;·&nbsp; miễn phí &nbsp;·&nbsp; Mac chip Apple, macOS 13 trở lên
 </p>
 
+<p align="center">
+  <b>Tiếng Việt</b> &nbsp;·&nbsp; <a href="README.en.md">English</a>
+</p>
+
 ---
 
 ## Mọi thứ trên menu bar
 
-Mỗi chỉ số là một mục riêng với đồ thị chạy trực tiếp. Bấm vào là ra bảng chi tiết — không cần mở
+Mỗi chỉ số là một mục riêng với đồ thị chạy trực tiếp. Bấm vào là ra bảng chi tiết, không cần mở
 cửa sổ nào.
 
 <p align="center">
@@ -32,6 +36,49 @@ cửa sổ nào.
 - **Mạng** — tốc độ tải lên / tải xuống, đang ra Internet qua Wi-Fi, Ethernet hay VPN
 - **Kết nối** — một chấm xanh/đỏ cho biết có Internet không, IP công khai và IP nội bộ, bấm là copy
 - **Ổ đĩa** — tốc độ đọc/ghi và dung lượng còn trống
+- **App nào đang ngốn máy** — bảng CPU và RAM liệt kê 5 app nặng nhất, tiến trình phụ (như renderer
+  của Chrome) được cộng về đúng app; một nút mở thẳng Activity Monitor
+- **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
+- **Hình chạy theo CPU** — mèo, chó, cà phê, động cơ… chạy trên menu bar, CPU càng bận càng chạy
+  nhanh. Có sẵn 8 hình, hoặc nhập hình của riêng bạn từ ảnh PNG (dùng được hình từ
+  [Runner Gallery](https://runcat-dev.github.io/RunnerGallery/))
+
+## Tai thỏ biết nói
+
+Phần tai thỏ trên MacBook vốn bỏ trống. Tacho cho nó giãn ra báo tin trong vài giây, và rê chuột vào
+thì mở ra một bảng điều khiển nhỏ.
+
+<p align="center">
+  <img src="docs/images/notch-events.png" alt="Tai thỏ báo app ngốn CPU, cuộc họp sắp bắt đầu, và viền đỏ khi đang chia sẻ màn hình" width="70%">
+</p>
+
+**Tai thỏ báo khi:** cắm hoặc rút sạc · pin còn 20% và 10% · AirPods, chuột, bàn phím vừa kết nối ·
+mất mạng hoặc có mạng lại · cuộc gọi bắt đầu hoặc kết thúc · một app ngốn CPU, CPU quá nóng, hết RAM ·
+5 phút trước cuộc họp · hạn mức Claude Code hoặc Codex vượt 80% và 95%. **Đang chia sẻ màn hình**
+trong cuộc gọi thì tai thỏ giữ viền đỏ để bạn khỏi quên.
+
+**Rê chuột vào tai thỏ để:**
+
+- điều khiển nhạc đang phát ở bất kỳ app nào (YouTube, Spotify, Nhạc…) và chọn loa hoặc tai nghe
+- xem cuộc gọi Teams, Zoom… đang diễn ra, **tắt micro** bằng một nút, mở lại cửa sổ cuộc gọi
+- **vào họp** bằng một nút — cuộc họp lấy từ Lịch của macOS, kể cả họp Teams của tài khoản Microsoft 365
+- **thoát app** đang ngốn CPU ngay trong cảnh báo
+- **giữ máy thức** (không ngủ, không tắt màn hình) đến khi tắt, hoặc trong 1–2 giờ
+- **thả file tạm lên kệ** — kéo file lên tai thỏ, rồi kéo ra chỗ khác sau
+
+Vuốt hai ngón sang ngang để sang các trang khác:
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/notch-clipboard.png" alt="Trang lịch sử clipboard có tìm kiếm"></td>
+    <td width="50%"><img src="docs/images/notch-ai.png" alt="Trang hạn mức Claude Code và Codex"></td>
+  </tr>
+  <tr>
+    <td><b>Lịch sử clipboard</b> — 20 mục copy gần nhất, tìm không cần dấu, bấm để copy lại. Chỉ giữ
+    trong bộ nhớ, bỏ qua mật khẩu từ trình quản lý mật khẩu.</td>
+    <td><b>Claude Code và Codex</b> — % hạn mức 5 giờ và 7 ngày, giờ reset, token đã dùng hôm nay.</td>
+  </tr>
+</table>
 
 ## Biết máy nóng tới đâu
 
@@ -44,8 +91,8 @@ Nhiệt độ CPU đo ngay trên chip, tốc độ từng quạt, tải từng l
 
 ## Pin và sạc, rõ từng watt
 
-Máy đang dùng bao nhiêu watt, đang sạc vào pin bao nhiêu, cục sạc mạnh tới đâu và đang chạy bao
-nhiêu phần trăm công suất. Cùng với sức khỏe pin và số chu kỳ sạc.
+Máy đang dùng bao nhiêu watt, đang sạc vào pin bao nhiêu, còn bao lâu thì đầy, cục sạc mạnh tới đâu.
+Cùng với sức khỏe pin, số chu kỳ sạc, và pin của chuột, bàn phím, AirPods.
 
 <p align="center">
   <img src="docs/images/window-battery.png" alt="Cửa sổ Pin: công suất, sức khỏe pin, cục sạc" width="85%">
@@ -57,7 +104,7 @@ nhiêu phần trăm công suất. Cùng với sức khỏe pin và số chu kỳ
   <img src="docs/images/window-overview.png" alt="Cửa sổ Tổng quan, giao diện sáng" width="85%">
 </p>
 
-Giao diện sáng và tối theo macOS.
+Giao diện sáng và tối theo macOS. Có **lịch sử 24 giờ** để xem lại CPU, nhiệt độ, bộ nhớ, mạng, pin.
 
 ## Tiếng Việt · English · Русский
 
@@ -69,20 +116,14 @@ Giao diện sáng và tối theo macOS.
 
 ## Và còn nữa
 
-- **Biết ngay app nào đang ngốn máy** — bấm vào CPU hoặc RAM là thấy 5 app nặng nhất, các tiến trình
-  phụ (như renderer của Chrome) được cộng gộp về đúng app
 - **Cảnh báo kịp lúc** — CPU quá nóng, pin yếu, ổ đĩa sắp đầy, mất Internet; bật/tắt từng loại
 - **Mở cùng máy** — một công tắc trong Cài đặt
-- **Pin chuột, bàn phím, AirPods** — ngay trong bảng Pin, có cảnh báo khi sắp hết
-- **Lịch sử 24 giờ** — xem lại CPU, nhiệt độ, bộ nhớ, mạng, pin trong 1 giờ hoặc cả ngày qua
-- **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
-- **Tai thỏ biết nói** — cắm sạc, pin yếu, kết nối AirPods, mất mạng, vào cuộc gọi Teams, app ngốn CPU, sắp tới giờ họp thì tai thỏ giãn ra báo; đang chia sẻ màn hình thì viền đỏ. Rê chuột vào tai thỏ để điều khiển nhạc, chọn loa hoặc tai nghe, tắt micro trong cuộc gọi, vào họp bằng một nút, giữ máy thức, thả file tạm lên kệ, vuốt sang trang lịch sử clipboard có tìm kiếm, và trang hạn mức Claude Code / Codex (% hạn mức 5 giờ và 7 ngày, giờ reset, token hôm nay)
-- **Hình chạy theo CPU** — mèo, chó, cà phê, động cơ… chạy trên menu bar, CPU càng bận càng chạy nhanh. Hình từ [RunCat Neo](https://github.com/runcat-dev/RunCatNeo) (Apache 2.0)
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
-- **Nhẹ** — bản tải về khoảng 3 MB, không chạy animation thừa
-- **Riêng tư** — mọi số liệu đọc ngay trên máy; chỉ gọi mạng để kiểm tra Internet và bản cập nhật,
-  tắt được cả hai
-- **Tùy chọn** — chọn mục nào hiện trên menu bar, bật/tắt đồ thị, ẩn icon khỏi Dock, đổi tần suất cập nhật
+- **Nhẹ** — bản tải về khoảng 3 MB; lúc tai thỏ không hiện gì thì không tốn CPU
+- **Riêng tư** — mọi số liệu đọc ngay trên máy. Tacho chỉ gọi mạng để kiểm tra Internet và tìm bản cập
+  nhật, tắt được cả hai. Lịch, clipboard và nhật ký Claude Code / Codex chỉ được đọc trên máy, không gửi đi đâu
+- **Tùy chọn** — chọn mục nào hiện trên menu bar, bật/tắt đồ thị, ẩn icon khỏi Dock, đổi tần suất
+  cập nhật; mỗi tính năng tai thỏ bật/tắt riêng
 
 ## Cài đặt
 
@@ -90,7 +131,19 @@ Giao diện sáng và tối theo macOS.
 2. Mở ra và kéo **Tacho** vào **Applications**
 3. Lần đầu mở: **chuột phải vào Tacho → Open** (hoặc **System Settings → Privacy & Security → Open Anyway**)
 
-Từ đó về sau Tacho tự cập nhật.
+Từ đó về sau Tacho tự cập nhật. Tính năng tai thỏ bật trong **Cài đặt → Tai thỏ**. Một vài tính năng
+sẽ xin quyền khi bạn bật:
+
+- **Trợ năng** — để các nút phát, chuyển bài gửi được phím media
+- **Lịch** — để nhắc cuộc họp
+- **Claude Code** — bấm **Kết nối Claude Code** để Tacho làm statusLine và đọc được hạn mức; số cập nhật
+  khi bạn dùng `claude` trong terminal. Hạn mức Codex đọc thẳng, không cần làm gì
+
+## Ghi công
+
+Các hình chạy trên menu bar và cách cho chúng chạy lấy từ
+[RunCat Neo](https://github.com/runcat-dev/RunCatNeo), theo giấy phép Apache 2.0
+(xem [`Assets/Runners/NOTICE`](Assets/Runners/NOTICE)).
 
 ---
 
