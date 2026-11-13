@@ -15,6 +15,7 @@ enum AppEnvironment {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
     private var notch: NotchController?
+    private var infra: InfraStatusController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                         settings: AppEnvironment.settings,
                                         updater: AppEnvironment.updater)
         notch = NotchController(store: AppEnvironment.store, settings: AppEnvironment.settings)
+        infra = InfraStatusController(settings: AppEnvironment.settings)
         if arguments.contains("--notch-demo") { notch?.runDemo() }
         if arguments.contains("--notch-info") { notch?.printInfo() }
         AppEnvironment.updater.startAutomaticChecks()
@@ -75,6 +77,40 @@ struct TachoApp: App {
         if CommandLine.arguments.contains("--claude-disconnect") {
             ClaudeStatusLine.uninstall()
             print("Disconnected")
+            exit(0)
+        }
+        if CommandLine.arguments.contains("--network-info") {
+            print("VPN interfaces: \(VPN.activeInterfaces())")
+            for app in NetworkApps.sampleNow() {
+                print("\(app.name): in \(Fmt.rate(app.inRate)) out \(Fmt.rate(app.outRate))")
+            }
+            exit(0)
+        }
+        if CommandLine.arguments.contains("--infra-info") {
+            let containers = DockerSocket.containers()
+            print(containers.map { "Docker: \($0.filter(\.isRunning).count) running of \($0.count)" } ?? "Docker: not reachable")
+            if let containers {
+                print("VM memory: \(DockerSocket.vmMemory().map { Fmt.bytes($0) } ?? "-")")
+                for container in containers where container.isRunning {
+                    print("  \(container.name): \(DockerSocket.memory(of: container.id).map { Fmt.bytes($0) } ?? "-")")
+                }
+            }
+            // `--infra-info stop <id>` / `start <id>`: the panel's buttons, for checking.
+            if let index = CommandLine.arguments.firstIndex(of: "--infra-info"), index + 2 < CommandLine.arguments.count {
+                let verb = CommandLine.arguments[index + 1], id = CommandLine.arguments[index + 2]
+                print("\(verb) \(id): \(DockerSocket.setRunning(verb == "start", id: id) ? "ok" : "failed")")
+            }
+            let kube = KubeConfig.read()
+            print("Kubernetes: current \(kube.current?.name ?? "-") cluster \(kube.current?.cluster ?? "-") "
+                  + "namespace \(kube.current?.namespace ?? "default") production \(kube.current?.isProduction ?? false), "
+                  + "\(kube.all.count) contexts")
+            // The menu bar title's width, for a sample state and this Mac's.
+            let sample = InfraState(containers: [Container(id: "a", name: "web", image: "", state: "running", status: "")],
+                                    kubeCurrent: KubeContext(name: "gke-asia-staging-cluster", cluster: "", namespace: nil))
+            let mine = InfraState(containers: containers, kubeCurrent: kube.current, kubeContexts: kube.all)
+            print(String(format: "Title width: sample %.0f pt, this Mac %.0f pt",
+                         InfraStatusController.title(for: sample).size().width,
+                         InfraStatusController.title(for: mine).size().width))
             exit(0)
         }
         // What the notch's AI page would show, for checking the readers.

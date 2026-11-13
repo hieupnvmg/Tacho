@@ -57,6 +57,8 @@ final class MenuBarSettings: ObservableObject {
     @Published var compact: Bool { didSet { persist() } }
     /// A runner in the menu bar that goes faster as the CPU gets busier.
     @Published var runningCat: Bool { didSet { persist() } }
+    /// Running containers and the Kubernetes context, in their own item.
+    @Published var infraItem: Bool { didSet { persist() } }
     /// Which runner that is: a built-in one's name or an imported one's id.
     @Published var runnerID: String { didSet { persist() } }
     /// Short events (charger, accessories, connection) grow out of the notch.
@@ -94,6 +96,7 @@ final class MenuBarSettings: ObservableObject {
     private static let compactKey = "menubar.compact"
     private static let catKey = "menubar.runningCat"
     private static let runnerKey = "menubar.runner"
+    private static let infraKey = "menubar.infra"
     private static let notchEventsKey = "notch.events"
     private static let notchPeekKey = "notch.peek"
     private static let notchMeetingsKey = "notch.meetings"
@@ -129,6 +132,7 @@ final class MenuBarSettings: ObservableObject {
         compact = defaults.bool(forKey: Self.compactKey)
         runningCat = defaults.bool(forKey: Self.catKey)
         runnerID = defaults.string(forKey: Self.runnerKey) ?? Runner.defaultID
+        infraItem = defaults.bool(forKey: Self.infraKey)
         notchEvents = defaults.bool(forKey: Self.notchEventsKey)
         notchPeek = defaults.bool(forKey: Self.notchPeekKey)
         notchMeetings = defaults.bool(forKey: Self.notchMeetingsKey)
@@ -172,6 +176,7 @@ final class MenuBarSettings: ObservableObject {
         defaults.set(compact, forKey: Self.compactKey)
         defaults.set(runningCat, forKey: Self.catKey)
         defaults.set(runnerID, forKey: Self.runnerKey)
+        defaults.set(infraItem, forKey: Self.infraKey)
         defaults.set(notchEvents, forKey: Self.notchEventsKey)
         defaults.set(notchPeek, forKey: Self.notchPeekKey)
         defaults.set(notchMeetings, forKey: Self.notchMeetingsKey)

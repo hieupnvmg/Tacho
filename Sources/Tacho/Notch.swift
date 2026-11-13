@@ -41,6 +41,9 @@ enum NotchEvent: Hashable {
     case meetingSoon(minutes: Int)
     case meetingNow
     case lowBattery(Int)
+    case vpn(Bool)
+    /// The address the Internet sees changed.
+    case ipChanged(String)
 
     var symbol: String {
         switch self {
@@ -62,6 +65,8 @@ enum NotchEvent: Hashable {
         case .meetingSoon: return "calendar"
         case .meetingNow: return "video.fill"
         case .lowBattery: return "battery.25"
+        case .vpn(let up): return up ? "lock.shield.fill" : "lock.open.fill"
+        case .ipChanged: return "network"
         }
     }
 
@@ -77,6 +82,8 @@ enum NotchEvent: Hashable {
         case .meetingSoon(let minutes): return L("%d phút", minutes)
         case .meetingNow: return L("Bắt đầu")
         case .lowBattery(let percent): return "\(percent)%"
+        case .vpn(let up): return up ? "VPN" : L("Hết VPN")
+        case .ipChanged(let address): return address
         }
     }
 
@@ -90,6 +97,8 @@ enum NotchEvent: Hashable {
         case .resource(_, _, let critical): return critical ? Palette.critical : Palette.warning
         case .meetingSoon, .meetingNow: return Palette.cpu
         case .lowBattery: return Palette.critical
+        case .vpn(let up): return up ? Palette.memory : Palette.warning
+        case .ipChanged: return .white
         }
     }
 
@@ -1430,6 +1439,9 @@ final class NotchController {
     private var announced: Set<String> = []
     /// The low-battery level last warned about, until the charger goes in.
     private var batteryWarned: Int?
+    private var lastVPN: Bool?
+    private var vpnChanged = Date.distantPast
+    private var lastPublicIP: String?
     /// Refreshes the song and the output list while the panel is open.
     private var peekTimer: Timer?
     private var callTick = 0
@@ -2059,6 +2071,22 @@ final class NotchController {
             } else if until <= 0, until > -120, announced.insert(meeting.id + "|now").inserted {
                 show(.meetingNow)
             }
+        }
+
+        // A VPN coming up or going away, split tunnels included.
+        let vpnUp = !VPN.activeInterfaces().isEmpty
+        if let last = lastVPN, last != vpnUp {
+            show(.vpn(vpnUp))
+            vpnChanged = Date()
+        }
+        lastVPN = vpnUp
+        // A new public address, unless a VPN change just explained it.
+        let address = store.connectivity.publicIP
+        if !address.isEmpty {
+            if let last = lastPublicIP, last != address, Date().timeIntervalSince(vpnChanged) > 15 {
+                show(.ipChanged(address))
+            }
+            lastPublicIP = address
         }
 
         let battery = store.battery

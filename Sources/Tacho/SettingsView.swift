@@ -101,6 +101,12 @@ struct SettingsView: View {
                         }
                 }
                 VStack(alignment: .leading, spacing: 2) {
+                    Toggle(L("Docker và Kubernetes trên menu bar"), isOn: $settings.infraItem)
+                    Text(L("Số container đang chạy và context Kubernetes hiện tại; chuyển đỏ khi context có chữ prod. Đọc thẳng socket Docker và ~/.kube/config, không chạy lệnh nào."))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 2) {
                     Toggle(L("Kiểm tra kết nối Internet"), isOn: $settings.checkConnectivity)
                     Text(L("Gọi 1.1.1.1 của Cloudflare mỗi 60 giây để biết có Internet và lấy IP ra Internet."))
                         .font(.system(size: 10))

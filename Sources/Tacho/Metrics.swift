@@ -313,7 +313,7 @@ struct ProcessRanking {
     /// Chrome's renderers live at …/Google Chrome.app/Contents/Frameworks/…/
     /// Google Chrome Helper (Renderer).app; the outermost bundle is the app
     /// the user knows.
-    private static func outermostApp(of pid: Int32) -> String? {
+    static func outermostApp(of pid: Int32) -> String? {
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         let path = String(cString: buffer)

@@ -376,6 +376,14 @@ struct MenuBarPopover: View {
 
             Divider()
 
+            NetworkAppsList()
+
+            Divider()
+
+            SpeedTestRow()
+
+            Divider()
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(L("Từ lúc mở app"))
                     .font(.system(size: 10, weight: .medium))
@@ -830,6 +838,102 @@ private struct PeripheralList: View {
         case "Phải": return L("Phải")
         case "Hộp": return L("Hộp")
         default: return part
+        }
+    }
+}
+
+
+/// The apps moving the most data right now, read while the panel is open.
+private struct NetworkAppsList: View {
+    @ObservedObject private var monitor = NetworkApps.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("App đang dùng mạng"))
+                .font(.system(size: 10, weight: .medium))
+                .textCase(.uppercase)
+                .foregroundStyle(.tertiary)
+            if monitor.apps.isEmpty {
+                Text(monitor.reading ? L("Đang đo…") : L("Không app nào đang tải gì."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(monitor.apps) { app in
+                    HStack(spacing: 6) {
+                        if let icon = app.icon {
+                            Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                        } else {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16, height: 16)
+                        }
+                        Text(app.name)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                        Spacer(minLength: 6)
+                        Text("↓ " + Fmt.rate(app.inRate))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Palette.netIn)
+                        Text("↑ " + Fmt.rate(app.outRate))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Palette.netOut)
+                    }
+                }
+            }
+        }
+        .onAppear { monitor.start() }
+        .onDisappear { monitor.stop() }
+    }
+}
+
+/// macOS's own speed test, on demand: speeds, responsiveness, and whether
+/// that is enough for a video call.
+private struct SpeedTestRow: View {
+    @ObservedObject private var test = SpeedTest.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L("Tốc độ mạng"))
+                    .font(.system(size: 10, weight: .medium))
+                    .textCase(.uppercase)
+                    .foregroundStyle(.tertiary)
+                Spacer()
+                if test.running {
+                    ProgressView().controlSize(.small)
+                    Button(L("Dừng")) { test.cancel() }
+                        .buttonStyle(.link)
+                        .font(.system(size: 11))
+                } else {
+                    Button(test.result == nil ? L("Đo ngay") : L("Đo lại")) { test.run() }
+                        .buttonStyle(.link)
+                        .font(.system(size: 11))
+                        .help(L("Dùng networkQuality của macOS, khoảng 20 giây, tải khá nhiều dữ liệu."))
+                }
+            }
+            if let result = test.result {
+                HStack(spacing: 10) {
+                    Label(SpeedTest.speed(result.download), systemImage: "arrow.down")
+                        .foregroundStyle(Palette.netIn)
+                    Label(SpeedTest.speed(result.upload), systemImage: "arrow.up")
+                        .foregroundStyle(Palette.netOut)
+                    Text(L("Độ phản hồi: %@", result.responsivenessLabel))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.system(size: 11, weight: .medium))
+                Text(result.goodForCalls ? L("Đủ tốt cho họp video.") : L("Có thể giật khi họp video."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(result.goodForCalls ? Palette.memory : Palette.warning)
+            } else if test.failed {
+                Text(L("Không đo được. Kiểm tra lại kết nối Internet."))
+                    .font(.system(size: 10))
+                    .foregroundStyle(Palette.warning)
+            } else if test.running {
+                Text(L("Đang đo, khoảng 20 giây…"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
