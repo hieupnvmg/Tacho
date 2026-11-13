@@ -33,12 +33,16 @@ cửa sổ nào.
   <img src="docs/images/popovers.png" alt="Bảng chi tiết mạng, ổ đĩa và kết nối" width="100%">
 </p>
 
-- **Mạng** — tốc độ tải lên / tải xuống, đang ra Internet qua Wi-Fi, Ethernet hay VPN
+- **Mạng** — tốc độ tải lên / tải xuống, đang ra Internet qua Wi-Fi, Ethernet hay VPN, **app nào đang
+  dùng mạng**, và nút **đo tốc độ mạng** cho biết có đủ tốt để họp video không
 - **Kết nối** — một chấm xanh/đỏ cho biết có Internet không, IP công khai và IP nội bộ, bấm là copy
 - **Ổ đĩa** — tốc độ đọc/ghi và dung lượng còn trống
 - **App nào đang ngốn máy** — bảng CPU và RAM liệt kê 5 app nặng nhất, tiến trình phụ (như renderer
   của Chrome) được cộng về đúng app; một nút mở thẳng Activity Monitor
 - **Chế độ gọn** — gộp mọi chỉ số vào một mục nhỏ, hợp với MacBook có tai thỏ
+- **Docker và Kubernetes** — một mục nhỏ: số container đang chạy và biểu tượng ⎈ chuyển đỏ khi context
+  Kubernetes là production. Bấm vào để bật/tắt Docker, chạy/dừng từng container, xem RAM Docker và
+  từng container đang dùng
 - **Hình chạy theo CPU** — mèo, chó, cà phê, động cơ… chạy trên menu bar, CPU càng bận càng chạy
   nhanh. Có sẵn 8 hình, hoặc nhập hình của riêng bạn từ ảnh PNG (dùng được hình từ
   [Runner Gallery](https://runcat-dev.github.io/RunnerGallery/))
@@ -53,7 +57,7 @@ thì mở ra một bảng điều khiển nhỏ.
 </p>
 
 **Tai thỏ báo khi:** cắm hoặc rút sạc · pin còn 20% và 10% · AirPods, chuột, bàn phím vừa kết nối ·
-mất mạng hoặc có mạng lại · cuộc gọi bắt đầu hoặc kết thúc · một app ngốn CPU, CPU quá nóng, hết RAM ·
+mất mạng hoặc có mạng lại · VPN bật hoặc rớt, IP ra Internet đổi · cuộc gọi bắt đầu hoặc kết thúc · một app ngốn CPU, CPU quá nóng, hết RAM ·
 5 phút trước cuộc họp · hạn mức Claude Code hoặc Codex vượt 80% và 95%. **Đang chia sẻ màn hình**
 trong cuộc gọi thì tai thỏ giữ viền đỏ để bạn khỏi quên.
 
@@ -119,7 +123,8 @@ Giao diện sáng và tối theo macOS. Có **lịch sử 24 giờ** để xem l
 - **Cảnh báo kịp lúc** — CPU quá nóng, pin yếu, ổ đĩa sắp đầy, mất Internet; bật/tắt từng loại
 - **Mở cùng máy** — một công tắc trong Cài đặt
 - **Tự cập nhật** — có bản mới là Tacho báo, bấm một nút là xong
-- **Nhẹ** — bản tải về khoảng 3 MB; lúc tai thỏ không hiện gì thì không tốn CPU
+- **Nhẹ** — bản tải về khoảng 3 MB, khoảng 2% CPU khi chạy nền; mở máy là nằm gọn trên menu bar, không
+  tự bật cửa sổ
 - **Riêng tư** — mọi số liệu đọc ngay trên máy. Tacho chỉ gọi mạng để kiểm tra Internet và tìm bản cập
   nhật, tắt được cả hai. Lịch, clipboard và nhật ký Claude Code / Codex chỉ được đọc trên máy, không gửi đi đâu
 - **Tùy chọn** — chọn mục nào hiện trên menu bar, bật/tắt đồ thị, ẩn icon khỏi Dock, đổi tần suất

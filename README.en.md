@@ -32,12 +32,16 @@ Each reading is its own item with a live graph. Click one for the details, no wi
   <img src="docs/images/popovers.png" alt="Network, disk and connection panels" width="100%">
 </p>
 
-- **Network** — upload and download speed, and whether you're online through Wi-Fi, Ethernet or a VPN
+- **Network** — upload and download speed, whether you're online through Wi-Fi, Ethernet or a VPN,
+  **which apps are using the network**, and a **speed test** that says whether it's good enough for video calls
 - **Connection** — a green or red dot for Internet access, your public and local IP, click to copy
 - **Disk** — read and write speed, and free space
 - **What's slowing the Mac down** — the CPU and memory panels list the five heaviest apps, with helper
   processes (like Chrome's renderers) added to the app they belong to; one button opens Activity Monitor
 - **Compact mode** — every reading in one small item, made for MacBooks with a notch
+- **Docker and Kubernetes** — a small item: running containers, and a ⎈ that turns red when the
+  Kubernetes context is production. Click it to start or quit Docker, start or stop containers, and see
+  how much RAM Docker and each container use
 - **CPU runner** — a cat, a dog, a coffee cup, an engine… runs in the menu bar, faster the busier the
   CPU. Eight come built in, or import your own from PNG frames (runners from the
   [Runner Gallery](https://runcat-dev.github.io/RunnerGallery/) work as they are)
@@ -52,7 +56,8 @@ seconds when something happens, and opens a small control panel when you rest th
 </p>
 
 **The notch tells you when:** the charger goes in or out · the battery reaches 20% and 10% · AirPods,
-a mouse or keyboard connect · the connection drops or comes back · a call starts or ends · an app hogs
+a mouse or keyboard connect · the connection drops or comes back · a VPN comes up or drops, the public
+IP changes · a call starts or ends · an app hogs
 the CPU, the CPU runs hot, memory runs out · a meeting is 5 minutes away · a Claude Code or Codex limit
 passes 80% and 95%. **While you share your screen** in a call, the notch keeps a red glow so you don't
 forget.
@@ -123,7 +128,8 @@ Switch languages in Settings; it applies at once.
 - **Timely alerts** — a hot CPU, low battery, a nearly full disk, no Internet; each can be turned off
 - **Open at login** — one switch in Settings
 - **Updates itself** — Tacho tells you when there's a new version; one click installs it
-- **Light** — about a 3 MB download; the notch costs nothing while it shows nothing
+- **Light** — about a 3 MB download and around 2% CPU in the background; it starts quietly in the menu
+  bar without opening a window
 - **Private** — every reading comes from the Mac itself. Tacho only goes online to check the
   connection and look for updates, and both can be turned off. Calendar, clipboard and the Claude Code
   and Codex logs are read on the Mac and never sent anywhere
