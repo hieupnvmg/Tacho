@@ -77,6 +77,8 @@ final class ConnectivityMonitor {
         let timer = Timer(timeInterval: probeInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.probe() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = probeInterval / 6
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         probe()

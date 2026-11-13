@@ -249,6 +249,8 @@ final class InfraWatcher: ObservableObject {
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = 2
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }

@@ -114,7 +114,7 @@ struct NowPlaying: Equatable {
 
     var sourceIcon: NSImage? {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: source)
-            .map { NSWorkspace.shared.icon(forFile: $0.path) }
+            .map { IconCache.icon(forFile: $0.path) }
     }
 }
 

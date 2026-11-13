@@ -914,7 +914,7 @@ private struct ShelfView: View {
             } else {
                 HStack(spacing: 4) {
                         ForEach(shelf.files, id: \.self) { url in
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                            Image(nsImage: IconCache.icon(forFile: url.path))
                                 .resizable()
                                 .frame(width: 28, height: 28)
                                 .help(url.lastPathComponent)
@@ -1161,7 +1161,7 @@ private struct ClipboardRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                 Text(L("Ảnh")).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
             case .files(let urls):
-                Image(nsImage: NSWorkspace.shared.icon(forFile: urls[0].path))
+                Image(nsImage: IconCache.icon(forFile: urls[0].path))
                     .resizable().frame(width: 20, height: 20)
                 Text(urls.count == 1 ? urls[0].lastPathComponent : L("%d file", urls.count))
                     .font(.system(size: 11))
@@ -1901,6 +1901,8 @@ final class NotchController {
                 self.media.refreshPermission()
             }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = 0.2
         RunLoop.main.add(timer, forMode: .common)
         peekTimer = timer
         expand(to: .peek)

@@ -35,10 +35,32 @@ enum MonitorSection: String, CaseIterable, Identifiable {
     }
 }
 
+/// The main window. It watches only whether it can be seen; everything that
+/// follows the readings lives in `MainWindowContent`, which exists only while
+/// the window is on screen. Before, the window's frame (sidebar, toolbar,
+/// uptime) kept following the store while hidden, and laying out its toolbar
+/// on every sample was most of the app's idle CPU time.
 struct ContentView: View {
-    @EnvironmentObject private var store: MonitorStore
     @EnvironmentObject private var settings: MenuBarSettings
     @StateObject private var visibility = WindowVisibility()
+
+    var body: some View {
+        Group {
+            if visibility.isVisible {
+                MainWindowContent()
+            } else {
+                Color.clear
+            }
+        }
+        .frame(minWidth: 860, minHeight: 600)
+        .background(WindowObserver { visibility.isVisible = $0 })
+        // See SettingsView: re-render every string when the language changes.
+        .id(settings.language)
+    }
+}
+
+struct MainWindowContent: View {
+    @EnvironmentObject private var store: MonitorStore
 
     var body: some View {
         NavigationSplitView {
@@ -59,20 +81,11 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(minWidth: 860, minHeight: 600)
-        .background(WindowObserver { visibility.isVisible = $0 })
-        // See SettingsView: re-render every string when the language changes.
-        .id(settings.language)
     }
 
-    /// While the window cannot be seen — covered, minimised, on another
-    /// Space — the tab is taken out of the view tree, so SwiftUI stops
-    /// re-rendering it every sample. That was most of the app's CPU time.
     @ViewBuilder
     private var detail: some View {
-        if !visibility.isVisible {
-            Color.clear
-        } else if store.section == .settings {
+        if store.section == .settings {
             // Form scrolls on its own and collapses inside a ScrollView.
             SettingsView(embedded: true)
         } else {

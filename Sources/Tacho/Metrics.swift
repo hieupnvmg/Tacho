@@ -380,6 +380,12 @@ final class MetricsCollector {
     private var fanLimits: [(minimum: Double, maximum: Double)]?
     /// CPU sensor keys, found once by walking the SMC key table.
     private var cpuTemperatureKeys: [String]?
+    /// How many of the first reads each key gave a real temperature, until
+    /// the unused sensor slots are dropped.
+    private var temperatureHits: [String: Int] = [:]
+    private var temperatureReads = 0
+    /// SMC keys read for the CPU temperature, for `--dump`.
+    var temperatureKeyCount: Int { cpuTemperatureKeys?.count ?? 0 }
 
     private let coreKinds: [CoreKind]
 
@@ -817,9 +823,18 @@ final class MetricsCollector {
             cpuTemperatureKeys = smc.keys(withPrefixes: ["Tp", "Te", "Tf"])
         }
         // Unused sensor slots read 0; anything outside this range is noise.
-        let readings = (cpuTemperatureKeys ?? [])
-            .compactMap { smc.number($0) }
-            .filter { $0 > 1 && $0 < 130 }
+        var readings: [Double] = []
+        for key in cpuTemperatureKeys ?? [] {
+            guard let value = smc.number(key), value > 1, value < 130 else { continue }
+            readings.append(value)
+            temperatureHits[key, default: 0] += 1
+        }
+        // Each key is a round trip to the kernel. After three reads, the
+        // slots that never gave a temperature are dropped for good.
+        temperatureReads += 1
+        if temperatureReads == 3, !temperatureHits.isEmpty {
+            cpuTemperatureKeys = cpuTemperatureKeys?.filter { temperatureHits[$0] != nil }
+        }
         guard !readings.isEmpty else { return TemperatureSample() }
         return TemperatureSample(cpuAverage: readings.reduce(0, +) / Double(readings.count),
                                  cpuHottest: readings.max() ?? 0,
@@ -1050,6 +1065,51 @@ final class MetricsCollector {
     // MARK: Processes
 
     /// Every process, busiest first.
+    /// CPU time each process had at the last `ownProcesses` call, in
+    /// nanoseconds, and when that was.
+    private var lastProcessTimes: [Int32: UInt64] = [:]
+    private var lastProcessRead: UInt64 = 0
+    private lazy var timebase: mach_timebase_info_data_t = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        return info
+    }()
+
+    /// The processes this account can read, from the kernel's counters
+    /// (libproc) rather than by running `ps`: about a third of the cost and
+    /// no process launched. CPU is the share since the previous call, so the
+    /// first call reports none. Other users' processes (WindowServer, root
+    /// daemons) are not readable this way; `processes()` still covers those
+    /// for the tables people look at.
+    func ownProcesses() -> [ProcessSample] {
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return [] }
+        var pids = [pid_t](repeating: 0, count: Int(count) + 64)
+        let listed = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        let now = DispatchTime.now().uptimeNanoseconds
+        let elapsed = lastProcessRead > 0 ? Double(now - lastProcessRead) : 0
+        var times: [Int32: UInt64] = [:]
+        var result: [ProcessSample] = []
+        var name = [CChar](repeating: 0, count: 64)
+        for pid in pids.prefix(Int(max(listed, 0))) where pid > 0 {
+            var task = proc_taskinfo()
+            let size = Int32(MemoryLayout<proc_taskinfo>.size)
+            guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &task, size) == size else { continue }
+            let cpuTime = (task.pti_total_user + task.pti_total_system) * UInt64(timebase.numer) / UInt64(timebase.denom)
+            times[pid] = cpuTime
+            var share = 0.0
+            if elapsed > 0, let previous = lastProcessTimes[pid], cpuTime >= previous {
+                share = Double(cpuTime - previous) / elapsed * 100
+            }
+            proc_name(pid, &name, UInt32(name.count))
+            result.append(ProcessSample(pid: pid, name: String(cString: name), cpu: share,
+                                        memory: task.pti_resident_size))
+        }
+        lastProcessTimes = times
+        lastProcessRead = now
+        return result.sorted { $0.cpu > $1.cpu }
+    }
+
     func processes() -> [ProcessSample] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")

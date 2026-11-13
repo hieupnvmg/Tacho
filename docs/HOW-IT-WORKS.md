@@ -342,16 +342,34 @@ Cách làm:
 
 ## Hiệu năng
 
-Đo bằng thời gian CPU của tiến trình trong 30 giây, trên MacBook Pro M1 Pro, lấy mẫu 1 giây/lần:
+Đo bằng thời gian CPU của tiến trình trong 120 giây, trên MacBook Pro M1 Pro, ba màn hình, cửa sổ chính
+đóng, chế độ gọn, bật tai thỏ (sự kiện, bảng, trang AI, lịch họp) và mục Docker/Kubernetes:
 
-| Trạng thái | CPU |
-|---|---|
-| Chỉ có menu bar (cửa sổ đóng hoặc bị che) | ~3% |
-| Cửa sổ chính đang hiện | ~4–5% |
-| Chế độ gọn (một mục menu bar) | ~1,6% |
-| Bật tai thỏ, lúc không hiện gì | không đo được khác biệt |
+| | Trước đợt tối ưu (1.6.x) | Sau |
+|---|---|---|
+| CPU | 3,5% | 2,0% |
+| Mẫu bận trong 30 giây (`sample`, 1 ms) | 1.248 | 374 |
+| Bộ nhớ đỉnh lúc quét nhật ký AI lần đầu | 334 MB | 98 MB |
+
+Cửa sổ chính đang hiện tốn thêm khoảng 2–3%. Lưu ý khi đo: app tự mở cửa sổ chính mỗi lần khởi
+động, nên phải đóng nó (nút đỏ) trước khi đo trạng thái nền.
 
 Những điều đã học được khi tối ưu — đừng đảo ngược:
+
+- **Struct `App` không giữ store bằng `@StateObject`.** Như vậy cả scene theo dõi `MonitorStore`, và
+  mỗi lần lấy mẫu SwiftUI dựng lại scene, cập nhật mọi cửa sổ kể cả cửa sổ đang ẩn. Các đối tượng
+  sống trong `AppEnvironment`; App chỉ giữ tham chiếu thường, view nào hiển thị thì tự theo dõi.
+- **Cửa sổ chính khi không nhìn thấy không theo dõi store.** `ContentView` chỉ theo dõi việc cửa sổ có
+  hiện không; mọi thứ theo số liệu nằm trong `MainWindowContent`, chỉ tồn tại khi cửa sổ hiện. Trước
+  đó thanh công cụ của cửa sổ ẩn được sắp xếp lại mỗi lần lấy mẫu.
+- **Popover đóng thì gỡ `contentViewController`.** Không thì view SwiftUI vẫn sống, vẫn vẽ lại, và
+  `onDisappear` không chạy (bảng Mạng đã từng để `nettop` chạy mãi).
+- **Việc chạy ngầm không gọi `ps`.** Canh app ngốn CPU đọc `proc_pidinfo` (libproc), không sinh tiến
+  trình; `ps` chỉ dùng cho bảng người dùng đang xem (nó thấy cả tiến trình của user khác).
+- **Timer có `tolerance`** để macOS gộp các lần đánh thức.
+- **Nhiệt độ đọc 5 giây một lần** bất kể tần suất lấy mẫu; khe cảm biến không dùng bị bỏ sau 3 lần đọc.
+- **Nhật ký lớn đọc theo khối 4 MB**, xong thì `malloc_zone_pressure_relief` trả bộ nhớ trống lại.
+- **Biểu tượng app qua `IconCache`**, không gọi `NSWorkspace.icon` mỗi lần vẽ.
 
 - **Mục menu bar chỉ vẽ lại khi nội dung nhìn thấy được thay đổi** (`StatusItemView.redrawIfChanged`).
   macOS chụp lại mỗi mục cho từng menu bar (mỗi màn hình, mỗi Space) mỗi lần nó vẽ lại, tốn hơn

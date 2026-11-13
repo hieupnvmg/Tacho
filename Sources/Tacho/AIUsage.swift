@@ -50,25 +50,42 @@ final class JSONLTail {
 
     /// Calls `line` for each complete new line. Lines are filtered by a
     /// substring first, since parsing JSON is the expensive part.
+    /// Calls `line` for each complete new line. Lines are filtered by a
+    /// substring first, since parsing JSON is the expensive part. Files are
+    /// read 4 MB at a time: a first read of a large session log no longer
+    /// holds the whole of it in memory at once.
     func read(_ files: [URL], containing needle: String, line: (Data) -> Void) {
         let needleData = Data(needle.utf8)
+        let chunkSize = 4 << 20
         for file in files {
             guard let handle = try? FileHandle(forReadingFrom: file) else { continue }
             defer { try? handle.close() }
             let size = (try? handle.seekToEnd()) ?? 0
-            var start = offsets[file.path] ?? 0
-            if start > size { start = 0 }   // replaced or truncated
-            guard size > start else { continue }
-            try? handle.seek(toOffset: start)
-            guard let data = try? handle.readToEnd(), let end = data.lastIndex(of: 0x0A) else { continue }
-            // Up to the last newline; a half-written line waits for next time.
-            offsets[file.path] = start + UInt64(end + 1)
-            var lineStart = data.startIndex
-            while lineStart <= end, let newline = data[lineStart...end].firstIndex(of: 0x0A) {
-                let slice = data[lineStart..<newline]
-                if slice.range(of: needleData) != nil { line(Data(slice)) }
-                lineStart = newline + 1
+            var position = offsets[file.path] ?? 0
+            if position > size { position = 0 }   // replaced or truncated
+            guard size > position else { continue }
+            try? handle.seek(toOffset: position)
+            var carry = Data()
+            while position < size {
+                let chunk: Data? = autoreleasepool { try? handle.read(upToCount: chunkSize) }
+                guard let chunk, !chunk.isEmpty else { break }
+                var data = carry
+                data.append(chunk)
+                position += UInt64(chunk.count)
+                guard let end = data.lastIndex(of: 0x0A) else {
+                    carry = data
+                    continue
+                }
+                var lineStart = data.startIndex
+                while lineStart <= end, let newline = data[lineStart...end].firstIndex(of: 0x0A) {
+                    let slice = data[lineStart..<newline]
+                    if slice.range(of: needleData) != nil { line(Data(slice)) }
+                    lineStart = newline + 1
+                }
+                carry = Data(data[(end + 1)...])
             }
+            // Up to the last newline; a half-written line waits for next time.
+            offsets[file.path] = position - UInt64(carry.count)
         }
     }
 }
@@ -437,12 +454,24 @@ final class AIUsageWatcher: ObservableObject {
     private var timer: Timer?
     private var reading = false
 
+    /// When the app started, near enough: the watcher is made at launch.
+    private let created = Date()
+
     func start() {
         guard timer == nil else { return }
-        refresh()
+        // The first read goes through every recent log, about a second of
+        // CPU; right after launch it waits, so starting up stays light. The
+        // page asks for a read itself if opened sooner.
+        if Date().timeIntervalSince(created) < 10 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.refresh() }
+        } else {
+            refresh()
+        }
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = 10
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -460,6 +489,9 @@ final class AIUsageWatcher: ObservableObject {
         queue.async {
             let codex = codexReader.isInstalled ? codexReader.read() : nil
             let claude = claudeReader.isInstalled ? claudeReader.read() : nil
+            // Reading leaves freed buffers the allocator would otherwise keep
+            // counted against Tacho; hand them back.
+            malloc_zone_pressure_relief(nil, 0)
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     self.reading = false

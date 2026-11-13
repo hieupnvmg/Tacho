@@ -169,6 +169,8 @@ final class MeetingWatcher: ObservableObject {
             let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.refresh() }
             }
+            // Tolerance lets macOS fold this wakeup in with others.
+            timer.tolerance = 10
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer
             self.changeObserver = NotificationCenter.default.addObserver(
@@ -304,7 +306,7 @@ struct ResourceAlert: Equatable {
     }
 
     var icon: NSImage? {
-        if case .heavyApp(_, let path?, _) = kind { return NSWorkspace.shared.icon(forFile: path) }
+        if case .heavyApp(_, let path?, _) = kind { return IconCache.icon(forFile: path) }
         return nil
     }
 
@@ -401,7 +403,7 @@ enum ActivityMonitor {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.ActivityMonitor")
     }
 
-    static var icon: NSImage? { url.map { NSWorkspace.shared.icon(forFile: $0.path) } }
+    static var icon: NSImage? { url.map { IconCache.icon(forFile: $0.path) } }
 
     static func open() {
         guard let url else { return }
@@ -439,6 +441,8 @@ final class KeepAwake: ObservableObject {
             let timer = Timer(fire: end, interval: 0, repeats: false) { [weak self] _ in
                 MainActor.assumeIsolated { self?.stop() }
             }
+            // Tolerance lets macOS fold this wakeup in with others.
+            timer.tolerance = 30
             RunLoop.main.add(timer, forMode: .common)
             self.timer = timer
         }
@@ -511,7 +515,7 @@ final class ClipboardHistory: ObservableObject {
 
         static func == (a: Item, b: Item) -> Bool { a.id == b.id }
 
-        var icon: NSImage? { appPath.map { NSWorkspace.shared.icon(forFile: $0) } }
+        var icon: NSImage? { appPath.map { IconCache.icon(forFile: $0) } }
     }
 
     @Published private(set) var items: [Item] = [] {
@@ -541,6 +545,8 @@ final class ClipboardHistory: ObservableObject {
         let timer = Timer(timeInterval: 0.75, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = 0.25
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
@@ -747,4 +753,23 @@ final class ClipboardHistory: ObservableObject {
 
     func remove(_ item: Item) { items.removeAll { $0.id == item.id } }
     func clear() { items.removeAll() }
+}
+
+// MARK: - Icons
+
+/// App and file icons, looked up once. The panels draw them on every
+/// refresh, and each lookup goes to Launch Services and builds a new image.
+enum IconCache {
+    private static let cache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 200
+        return cache
+    }()
+
+    static func icon(forFile path: String) -> NSImage {
+        if let cached = cache.object(forKey: path as NSString) { return cached }
+        let icon = NSWorkspace.shared.icon(forFile: path)
+        cache.setObject(icon, forKey: path as NSString)
+        return icon
+    }
 }

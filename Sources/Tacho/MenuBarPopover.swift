@@ -46,7 +46,7 @@ struct MenuBarPopover: View {
             Button {
                 NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
             } label: {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                Image(nsImage: IconCache.icon(forFile: url.path))
                     .resizable()
                     .frame(width: 14, height: 14)
                     .contentShape(Rectangle())
@@ -743,7 +743,7 @@ private struct ProcessList: View {
     private static func icon(for app: AppUsage) -> NSImage? {
         guard let path = app.bundlePath else { return nil }
         if let cached = icons[path] { return cached }
-        let icon = NSWorkspace.shared.icon(forFile: path)
+        let icon = IconCache.icon(forFile: path)
         icons[path] = icon
         return icon
     }

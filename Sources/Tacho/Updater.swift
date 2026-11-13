@@ -75,6 +75,8 @@ final class Updater: ObservableObject {
         let timer = Timer(timeInterval: 60 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkIfDue() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = 300
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.checkIfDue() }

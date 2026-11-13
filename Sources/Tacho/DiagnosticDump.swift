@@ -36,10 +36,15 @@ enum DiagnosticDump {
             print("  core \(String(format: "%2d", core.id)) [\(core.kind.rawValue)] : \(Fmt.percent(core.busy))")
         }
 
-        let temperature = collector.temperature()
+        let keysBefore = { collector.temperatureKeyCount }
+        var temperature = collector.temperature()
+        let firstKeys = keysBefore()
+        _ = collector.temperature()
+        temperature = collector.temperature()
         if temperature.isPresent {
             print("  temp      : \(Fmt.celsius(temperature.cpuAverage)) avg, "
-                  + "\(Fmt.celsius(temperature.cpuHottest)) hottest (\(temperature.sensorCount) sensors)")
+                  + "\(Fmt.celsius(temperature.cpuHottest)) hottest (\(temperature.sensorCount) sensors, "
+                  + "SMC keys read \(firstKeys) → \(collector.temperatureKeyCount))")
         }
 
         print("\nFANS")

@@ -55,11 +55,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct TachoApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var store = AppEnvironment.store
-    @StateObject private var settings = AppEnvironment.settings
-    @StateObject private var updater = AppEnvironment.updater
-    @StateObject private var alerts = AppEnvironment.alerts
-    @StateObject private var history = AppEnvironment.history
+    // Plain references, not @StateObject: these live for the whole run in
+    // AppEnvironment, and observing them here made SwiftUI rebuild the
+    // scenes, and update every window even while hidden, on every sample.
+    // The views that show them observe them themselves.
+    private let store = AppEnvironment.store
+    private let settings = AppEnvironment.settings
+    private let updater = AppEnvironment.updater
+    private let alerts = AppEnvironment.alerts
+    private let history = AppEnvironment.history
 
     init() {
         // Claude Code runs this after every response; it must answer fast

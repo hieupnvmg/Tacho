@@ -135,20 +135,29 @@ final class MonitorStore: ObservableObject {
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.sample() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = interval / 10
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
+
+    private var lastThermalRead = Date.distantPast
 
     private func sample() {
         tick += 1
         // Spawning ps is the most expensive part of a sample, and only the
         // Processes tab and the CPU and memory popovers show the result.
-        let wantsProcesses = (wantsProcessList && (tick % 3 == 1 || processes.isEmpty))
-            || (watchHeavyApps && tick % 5 == 0 && cpu.busy > 0.25)
+        let wantsProcesses = wantsProcessList && (tick % 3 == 1 || processes.isEmpty)
+        // The notch's watch for one app hogging the CPU reads the counters
+        // directly (libproc), with no process to spawn, and only the user's
+        // own processes, which are the ones it could offer to quit.
+        let wantsHeavyCheck = !wantsProcessList && watchHeavyApps && tick % 5 == 0 && cpu.busy > 0.25
         let wantsVolumes = tick % 30 == 1
         // Die temperature and fan speed drift over seconds; each of the ~35
-        // SMC keys is a kernel round trip, so they are read every third tick.
-        let wantsThermal = tick % 3 == 1
+        // SMC keys is a kernel round trip, so they are read every 5 seconds
+        // whatever the sampling interval.
+        let wantsThermal = Date().timeIntervalSince(lastThermalRead) >= 4.5
+        if wantsThermal { lastThermalRead = Date() }
         // Drive hardware never changes unless something is plugged in, and the
         // battery gauge only moves slowly.
         let wantsDrives = tick % 30 == 1
@@ -166,7 +175,8 @@ final class MonitorStore: ObservableObject {
             let temperature = wantsThermal ? collector.temperature() : nil
             let disk = collector.diskIO()
             let network = collector.network()
-            let processes = wantsProcesses ? ProcessRanking(collector.processes()) : nil
+            let processes = wantsProcesses ? ProcessRanking(collector.processes())
+                : wantsHeavyCheck ? ProcessRanking(collector.ownProcesses()) : nil
             let volumes = wantsVolumes ? collector.volumes() : nil
             let drives = wantsDrives ? collector.drives() : nil
             let battery = wantsBattery ? collector.battery() : nil

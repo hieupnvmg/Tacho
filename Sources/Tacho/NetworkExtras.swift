@@ -13,7 +13,7 @@ struct NetworkAppUsage: Identifiable, Equatable {
     var inRate: Double
     var outRate: Double
 
-    var icon: NSImage? { bundlePath.map { NSWorkspace.shared.icon(forFile: $0) } }
+    var icon: NSImage? { bundlePath.map { IconCache.icon(forFile: $0) } }
 }
 
 /// Which apps are moving data, from `nettop`, the per-process counters macOS
@@ -37,6 +37,8 @@ final class NetworkApps: ObservableObject {
         let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.read() }
         }
+        // Tolerance lets macOS fold this wakeup in with others.
+        timer.tolerance = 0.5
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
