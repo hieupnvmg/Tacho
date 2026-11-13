@@ -1138,6 +1138,22 @@ struct WindowObserver: NSViewRepresentable {
             tokens.forEach(NotificationCenter.default.removeObserver)
             tokens = []
             guard let window else { return }
+            // Not brought back by macOS at the next launch: Tacho opens its
+            // window on the first launch only (AppDelegate).
+            window.isRestorable = false
+            if AppDelegate.suppressLaunchWindow {
+                AppDelegate.suppressLaunchWindow = false
+                // Invisible at once, so it never flashes, then closed once
+                // SwiftUI has finished putting it up.
+                window.alphaValue = 0
+                DispatchQueue.main.async {
+                    window.close()
+                    // Opened again later (Dock, a panel's button), it must
+                    // not come back invisible.
+                    window.alphaValue = 1
+                }
+                return
+            }
             let names: [Notification.Name] = [NSWindow.didChangeOcclusionStateNotification,
                                               NSWindow.didMiniaturizeNotification,
                                               NSWindow.didDeminiaturizeNotification]

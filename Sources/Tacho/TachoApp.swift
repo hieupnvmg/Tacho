@@ -29,7 +29,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         AppEnvironment.settings.applyActivationPolicy()
-        NSApp.activate(ignoringOtherApps: true)
+        // Only the first launch brings Tacho forward with its window; after
+        // that it starts quietly in the menu bar (see below).
+        if Self.isFirstLaunch {
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            Self.suppressLaunchWindow = true
+            // Only the window opened by launching; any opened later stays.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { Self.suppressLaunchWindow = false }
+        }
         statusBar = StatusBarController(store: AppEnvironment.store,
                                         settings: AppEnvironment.settings,
                                         updater: AppEnvironment.updater)
@@ -40,6 +48,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppEnvironment.updater.startAutomaticChecks()
         AppEnvironment.alerts.start(store: AppEnvironment.store)
         AppEnvironment.history.start(store: AppEnvironment.store)
+    }
+
+    /// Whether Tacho has never finished launching on this Mac before. Read
+    /// once, then marked, so it holds for the whole first run.
+    static let isFirstLaunch: Bool = {
+        let key = "launch.done"
+        let first = !UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.set(true, forKey: key)
+        return first
+    }()
+
+    /// A menu bar app opens its window on the first launch only: logging in,
+    /// an update's relaunch or a restart leave it in the menu bar. SwiftUI's
+    /// WindowGroup opens one at every launch regardless, so the main window
+    /// closes itself if it appears while this is set (see `WindowObserver`).
+    /// The Dock icon and the menu bar panels open it later as usual.
+    @MainActor static var suppressLaunchWindow = false
+
+    /// Clicking the Dock icon, or opening Tacho again, with no window up
+    /// brings the main window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { MainActor.assumeIsolated { MenuBarPopover.openMainWindow() } }
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
