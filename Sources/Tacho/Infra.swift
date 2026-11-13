@@ -414,7 +414,11 @@ final class InfraStatusController: NSObject, NSPopoverDelegate {
     }
 
     nonisolated func popoverDidClose(_ notification: Notification) {
-        MainActor.assumeIsolated { watcher.detailed = false }
+        MainActor.assumeIsolated {
+            watcher.detailed = false
+            // Released, so the closed panel stops following the watcher.
+            popover.contentViewController = nil
+        }
     }
 
     @objc private func clicked(_ sender: NSStatusBarButton) {

@@ -302,6 +302,10 @@ extension StatusBarController: NSPopoverDelegate {
             }
             openModule = nil
             store.popoverModule = nil
+            // A closed popover keeps its view alive otherwise, still redrawn
+            // on every sample and still running what its panels started
+            // (the network panel's nettop).
+            popover.contentViewController = nil
         }
     }
 }
