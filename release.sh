@@ -24,6 +24,31 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
+# The Homebrew tap (github.com/hieupnvmg/homebrew-tacho), checked out next to
+# this repository unless TAP_DIR says otherwise. After the GitHub release is
+# up, its cask gets the new version and the DMG's checksum, and is pushed, so
+# `brew install --cask tacho` installs the release just made.
+TAP_DIR="${TAP_DIR:-$(cd .. && pwd)/homebrew-tacho}"
+
+update_tap() {
+    local cask="${TAP_DIR}/Casks/tacho.rb"
+    if [ ! -f "$cask" ]; then
+        echo "==> No Homebrew tap at ${TAP_DIR}; skipped." >&2
+        return 0
+    fi
+    local sum
+    sum="$(cut -d' ' -f1 dist/Tacho.dmg.sha256)"
+    git -C "$TAP_DIR" pull --quiet --ff-only
+    sed -i '' -E "s/^  version \".*\"/  version \"${VERSION}\"/; s/^  sha256 \".*\"/  sha256 \"${sum}\"/" "$cask"
+    if git -C "$TAP_DIR" diff --quiet -- Casks/tacho.rb; then
+        echo "==> Homebrew tap already at ${VERSION}."
+        return 0
+    fi
+    git -C "$TAP_DIR" commit --quiet -m "tacho ${VERSION}" -- Casks/tacho.rb
+    git -C "$TAP_DIR" push --quiet origin HEAD
+    echo "==> Homebrew tap updated to ${VERSION}"
+}
+
 echo "$VERSION" > VERSION
 ./build-dmg.sh
 
@@ -39,6 +64,7 @@ if command -v gh >/dev/null 2>&1; then
     gh release create "$TAG" --repo "$REPO" --title "Tacho ${VERSION}" --notes "$NOTES" \
         dist/Tacho.dmg dist/Tacho.dmg.sha256
     echo "==> Released ${TAG}"
+    update_tap || echo "==> Could not update the Homebrew tap; edit ${TAP_DIR}/Casks/tacho.rb by hand." >&2
 else
     echo
     echo "==> Tag ${TAG} pushed. Create the release on GitHub and attach BOTH files:"

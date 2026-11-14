@@ -136,6 +136,14 @@ Giao diện sáng và tối theo macOS. Có **lịch sử 24 giờ** để xem l
 2. Mở ra và kéo **Tacho** vào **Applications**
 3. Lần đầu mở: **chuột phải vào Tacho → Open** (hoặc **System Settings → Privacy & Security → Open Anyway**)
 
+Hoặc cài bằng Homebrew:
+
+```bash
+brew tap hieupnvmg/tacho
+brew trust hieupnvmg/tacho
+brew install --cask tacho
+```
+
 Từ đó về sau Tacho tự cập nhật. Tính năng tai thỏ bật trong **Cài đặt → Tai thỏ**. Một vài tính năng
 sẽ xin quyền khi bạn bật:
 

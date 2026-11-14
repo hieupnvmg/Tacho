@@ -142,6 +142,14 @@ Switch languages in Settings; it applies at once.
 2. Open it and drag **Tacho** into **Applications**
 3. The first time: **right-click Tacho → Open** (or **System Settings → Privacy & Security → Open Anyway**)
 
+Or install with Homebrew:
+
+```bash
+brew tap hieupnvmg/tacho
+brew trust hieupnvmg/tacho
+brew install --cask tacho
+```
+
 From then on Tacho updates itself. The notch features are under **Settings → Notch**. A few ask for
 permission when you turn them on:
 
